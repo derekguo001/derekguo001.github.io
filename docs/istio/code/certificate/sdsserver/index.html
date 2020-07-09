@@ -1,0 +1,1212 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第三章 SDS Server | 郭栋的博客</title><meta property="og:title" content="第三章 SDS Server" />
+<meta property="og:description" content="一、模型定义   说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。
+Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的Start()，其它SDS相关对象的创建和启动都是在SDSAgent.Start()内部完成的。
+SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为SecretDiscoveryServiceServer，SDS Server实现其中的StreamSecrets()和FetchSecrets()，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为nodeagent.sds.sdsservice，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为workloadSds和gatewaySds，它们都作为了nodeagent.sds.Server的成员变量，而nodeagent.sds.Server就是真正的SDS Server。
+type Server struct { workloadSds *sdsservice gatewaySds *sdsservice ... } 为了将证书在本地进行缓存，引入了一个SecretManager interface。例如其中的GenerateSecret()会生成所有证书并将其缓存。
+type SecretManager interface { GenerateSecret(ctx context.Context, connectionID, resourceName, token string) (*model.SecretItem, error) SecretExist(connectionID, resourceName, token, version string) bool DeleteSecret(connectionID, resourceName string) ... } SecretManager interface本身会作为刚才提到的sdsservice对象一个成员，通过这种方式与SDS Server关联起来。
+type sdsservice struct { st cache.SecretManager ... } 一个名为SecretCache的struct实现了SecretManager，也就实现了SecretManager这个interface中的所有函数。
+SecretCache的struct内包含了一个名为fetcher的成员，它的类型是*secretfetcher.SecretFetcher，SecretCache就是通过fetcher来与Istiod进行证书签名等操作的。
+type SecretCache struct { fetcher *secretfetcher." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/certificate/sdsserver/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
+<meta itemprop="name" content="第三章 SDS Server">
+<meta itemprop="description" content="一、模型定义   说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。
+Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的Start()，其它SDS相关对象的创建和启动都是在SDSAgent.Start()内部完成的。
+SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为SecretDiscoveryServiceServer，SDS Server实现其中的StreamSecrets()和FetchSecrets()，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为nodeagent.sds.sdsservice，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为workloadSds和gatewaySds，它们都作为了nodeagent.sds.Server的成员变量，而nodeagent.sds.Server就是真正的SDS Server。
+type Server struct { workloadSds *sdsservice gatewaySds *sdsservice ... } 为了将证书在本地进行缓存，引入了一个SecretManager interface。例如其中的GenerateSecret()会生成所有证书并将其缓存。
+type SecretManager interface { GenerateSecret(ctx context.Context, connectionID, resourceName, token string) (*model.SecretItem, error) SecretExist(connectionID, resourceName, token, version string) bool DeleteSecret(connectionID, resourceName string) ... } SecretManager interface本身会作为刚才提到的sdsservice对象一个成员，通过这种方式与SDS Server关联起来。
+type sdsservice struct { st cache.SecretManager ... } 一个名为SecretCache的struct实现了SecretManager，也就实现了SecretManager这个interface中的所有函数。
+SecretCache的struct内包含了一个名为fetcher的成员，它的类型是*secretfetcher.SecretFetcher，SecretCache就是通过fetcher来与Istiod进行证书签名等操作的。
+type SecretCache struct { fetcher *secretfetcher.">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="2179">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第三章 SDS Server"/>
+<meta name="twitter:description" content="一、模型定义   说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。
+Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的Start()，其它SDS相关对象的创建和启动都是在SDSAgent.Start()内部完成的。
+SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为SecretDiscoveryServiceServer，SDS Server实现其中的StreamSecrets()和FetchSecrets()，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为nodeagent.sds.sdsservice，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为workloadSds和gatewaySds，它们都作为了nodeagent.sds.Server的成员变量，而nodeagent.sds.Server就是真正的SDS Server。
+type Server struct { workloadSds *sdsservice gatewaySds *sdsservice ... } 为了将证书在本地进行缓存，引入了一个SecretManager interface。例如其中的GenerateSecret()会生成所有证书并将其缓存。
+type SecretManager interface { GenerateSecret(ctx context.Context, connectionID, resourceName, token string) (*model.SecretItem, error) SecretExist(connectionID, resourceName, token, version string) bool DeleteSecret(connectionID, resourceName string) ... } SecretManager interface本身会作为刚才提到的sdsservice对象一个成员，通过这种方式与SDS Server关联起来。
+type sdsservice struct { st cache.SecretManager ... } 一个名为SecretCache的struct实现了SecretManager，也就实现了SecretManager这个interface中的所有函数。
+SecretCache的struct内包含了一个名为fetcher的成员，它的类型是*secretfetcher.SecretFetcher，SecretCache就是通过fetcher来与Istiod进行证书签名等操作的。
+type SecretCache struct { fetcher *secretfetcher."/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#一模型定义-">一、模型定义</a></li>
+    <li><a href="#二对象的创建-">二、对象的创建</a>
+      <ul>
+        <li><a href="#sdsagent-">SDSAgent</a></li>
+        <li><a href="#secretcache-">SecretCache</a></li>
+        <li><a href="#sds-server-">SDS Server</a></li>
+      </ul>
+    </li>
+    <li><a href="#三请求的处理流程-">三、请求的处理流程</a>
+      <ul>
+        <li><a href="#响应客户端请求-">响应客户端请求</a></li>
+        <li><a href="#主动推送-">主动推送</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/certificate/">证书管理</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第三章 SDS Server</h1>
+    
+	       
+	<h2 id="一模型定义-">一、模型定义</h2>
+<figure><a href="../sdsserver_data_1.png" target="_blank">
+    <img src="../sdsserver_data_1.png"/> </a>
+</figure>
+
+<p>说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。</p>
+<p>Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的<code>Start()</code>，其它SDS相关对象的创建和启动都是在<code>SDSAgent.Start()</code>内部完成的。</p>
+<p>SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为<code>SecretDiscoveryServiceServer</code>，SDS Server实现其中的<code>StreamSecrets()</code>和<code>FetchSecrets()</code>，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为<code>nodeagent.sds.sdsservice</code>，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为<code>workloadSds</code>和<code>gatewaySds</code>，它们都作为了<code>nodeagent.sds.Server</code>的成员变量，而<code>nodeagent.sds.Server</code>就是真正的SDS Server。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Server</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">workloadSds</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sdsservice</span>
+	<span style="color:#000">gatewaySds</span>  <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sdsservice</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>为了将证书在本地进行缓存，引入了一个<code>SecretManager</code> interface。例如其中的<code>GenerateSecret()</code>会生成所有证书并将其缓存。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">SecretManager</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">GenerateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connectionID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">SecretExist</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connectionID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">version</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">bool</span>
+	<span style="color:#000">DeleteSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connectionID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">resourceName</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p><code>SecretManager</code> interface本身会作为刚才提到的sdsservice对象一个成员，通过这种方式与SDS Server关联起来。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">sdsservice</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">st</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretManager</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>一个名为<code>SecretCache</code>的struct实现了<code>SecretManager</code>，也就实现了<code>SecretManager</code>这个interface中的所有函数。</p>
+<p><code>SecretCache</code>的struct内包含了一个名为<code>fetcher</code>的成员，它的类型是<code>*secretfetcher.SecretFetcher</code>，<code>SecretCache</code>就是通过<code>fetcher</code>来与Istiod进行证书签名等操作的。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">SecretCache</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">fetcher</span>        <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">secretfetcher</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretFetcher</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>实际上，除了Istiod之外，还可以集成第三方的CA服务，比如google。因此对进行与CA服务交互的client也做了一层抽象，interface名为<code>Client</code>，与CA服务进行交互的函数为<code>CSRign()</code>。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Client</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">CSRSign</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">reqID</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">csrPEM</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">byte</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">subjectID</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">certValidTTLInSec</span> <span style="color:#204a87;font-weight:bold">int64</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#204a87;font-weight:bold">string</span> <span style="color:#8f5902;font-style:italic">/*PEM-encoded certificate chain*/</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>用户可以通过实现这个函数来继承<code>Client</code>这个interface。在Istio的代码中包含了几个对应的实现，包括名为<code>googleCAClient</code>的client用来与google CA服务交互，也包含了名称为<code>citadelClient</code>的client与Istiod内置的CA服务进行交互。这些client作为上文提到的<code>secretfetcher.SecretFetcher</code>的成员，SecretFetcher在进行证书签名的时候，会调用这些client。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">SecretFetcher</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">CaClient</span>    <span style="color:#000">caClientInterface</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Client</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>除了通过SDS Server接受Envoy请求，然后向Istiod发送请求进行签名之外，还有另外一种情况，即证书发生变化后主动向Envoy推送配置，因此在SecretCache结构中包含了一个回调函数的成员<code>notifyCallback</code>。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">SecretCache</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">fetcher</span>        <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">secretfetcher</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretFetcher</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#8f5902;font-style:italic">// callback function to invoke when detecting secret change.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">notifyCallback</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span> <span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">secret</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>至此，已经将SDS Server相关的数据模型进行了串联，下面分析一下执行的具体流程。</p>
+<h2 id="二对象的创建-">二、对象的创建</h2>
+<h3 id="sdsagent-">SDSAgent</h3>
+<p>在启动Pilot Agent的过程中，首先会创建SDSAgent对象，并执行它的<code>Start()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">proxyCmd</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">Use</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#4e9a06">&#34;proxy&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Short</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;Envoy proxy agent&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">FParseErrWhitelist</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">FParseErrWhitelist</span><span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#8f5902;font-style:italic">// Allow unknown flags for backward-compatibility.
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#000">UnknownFlags</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000;font-weight:bold">},</span>
+		<span style="color:#000">RunE</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">sa</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">istio_agent</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewSDSAgent</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryAddress</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControlPlaneAuthPolicy</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">meshconfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AuthenticationPolicy_MUTUAL_TLS</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">pilotCertProvider</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">jwtPath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">outputKeyCertToDir</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">clusterIDVar</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#8f5902;font-style:italic">// Start in process SDS.
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">role</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Type</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SidecarProxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">podNamespaceVar</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Fatala</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to start in-process SDS&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+
+</code></pre></div><p>其中的<code>NewSDSAgent()</code>主要是做了一些变量初始化工作，主要的对象创建都在<code>Start()</code>中，代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sa</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SDSAgent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">isSidecar</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">podNamespace</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">workloadSecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">newSecretCache</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">workloadSecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">gatewaySecretCache</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>在<code>Start()</code>中首先创建了SecretCache对象，然后再用它作为参数去创建SDS Server对象。</p>
+<p>先看SecretCache对象的创建</p>
+<h3 id="secretcache-">SecretCache</h3>
+<p>在<code>newSecretCache()</code>中实现</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// newSecretCache creates the cache for workload secrets and/or gateway secrets.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sa</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SDSAgent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">newSecretCache</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Options</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">workloadSecretCache</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caClient</span> <span style="color:#000">caClientInterface</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Client</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">ret</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">secretfetcher</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretFetcher</span><span style="color:#000;font-weight:bold">{}</span>
+
+	<span style="color:#8f5902;font-style:italic">// TODO: get the MC public keys from pilot.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// In node agent, a controller is used getting &#39;istio-security.istio-system&#39; config map
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// Single caTLSRootCert inside.
+</span><span style="color:#8f5902;font-style:italic"></span>
+	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">err</span> <span style="color:#204a87;font-weight:bold">error</span>
+</code></pre></div><p>首先，根据配置判断CA的类型，如果为GoogleCA，则使用google的CA服务，会创建对应的Client。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#8f5902;font-style:italic">// TODO: this should all be packaged in a plugin, possibly with optional compilation.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;serverOptions.CAEndpoint == %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAProviderName</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;GoogleCA&#34;</span> <span style="color:#ce5c00;font-weight:bold">||</span> <span style="color:#000">strings</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Contains</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;googleapis.com&#34;</span><span style="color:#000;font-weight:bold">))</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span>
+		<span style="color:#000">stsclient</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GKEClusterURL</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#8f5902;font-style:italic">// Use a plugin to an external CA - this has direct support for the K8S JWT token
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// This is only used if the proper env variables are injected - otherwise the existing Citadel or Istiod will be
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// used.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">caClient</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">gca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewGoogleCAClient</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PluginNames</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">{</span><span style="color:#4e9a06">&#34;GoogleTokenExchange&#34;</span><span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+</code></pre></div><p>否则的话，使用默认的CA，即Istiod中实现的CA Server，接下来判断是否配置了serverOptions.CAEndpoint，如果没有配置，则使用默认的配置，具体代码不在这里展开。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">		<span style="color:#8f5902;font-style:italic">// Determine the default CA.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// If /etc/certs exists - it means Citadel is used (possibly in a mode to only provision the root-cert, not keys)
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// Otherwise: default to istiod
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">//
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// If an explicit CA is configured, assume it is mounting /etc/certs
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">rootCert</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">byte</span>
+
+		<span style="color:#000">tls</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">true</span>
+		<span style="color:#000">certReadErr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">false</span>
+
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+</code></pre></div><p>在默认安装Istio的情况下会对serverOptions.CAEndpoint参数(环境变量<code>CA_ADDR</code>)配置为<code>istiod.istio-system.svc:15012</code>，同时会启用双向TLS认证，下面是sidecar的配置</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">args</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- proxy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- sidecar<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- --domain<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">env</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>PILOT_CERT_PROVIDER<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">value</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istiod<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>CA_ADDR<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">value</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istiod.istio-system.svc<span style="color:#000;font-weight:bold">:</span><span style="color:#0000cf;font-weight:bold">15012</span><span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>代码会执行下面的逻辑</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#8f5902;font-style:italic">// Explicitly configured CA
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using user-configured CA &#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">strings</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">HasSuffix</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;:15010&#34;</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warna</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Debug mode or IP-secure network&#34;</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000">tls</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">false</span>
+			<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSEnabled</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;istiod&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;istiod uses self-issued certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">path</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Join</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">CitadelCACertPath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">constants</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CACertNamespaceConfigMapDataName</span><span style="color:#000;font-weight:bold">));</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+						<span style="color:#000">certReadErr</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+					<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+						<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;the CA cert of istiod is: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">))</span>
+					<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;kubernetes&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;istiod uses the k8s root certificate %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">k8sCAPath</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">k8sCAPath</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+						<span style="color:#000">certReadErr</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+					<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;custom&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;istiod uses a custom root certificate mounted in a well known location %v&#34;</span><span style="color:#000;font-weight:bold">,</span>
+						<span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DefaultRootCertFilePath</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DefaultRootCertFilePath</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+						<span style="color:#000">certReadErr</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+					<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;unknown cert provider %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#000">certReadErr</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+				<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">certReadErr</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">rootCert</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">nil</span>
+					<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Fatal</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;invalid config - port 15012 missing a root certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#000;font-weight:bold">}</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>上面这段代码会根据serverOptions.PilotCertProvider进一步判断根证书是由谁提供的，这个参数是由环境变量来配置的，在默认安装的情况下会使用指定的默认值&quot;istiod&rdquo;，详细可参考概述中SDS Server控制面证书一节的内容。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">pilotCertProvider</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">env</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RegisterStringVar</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;PILOT_CERT_PROVIDER&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;istiod&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#4e9a06">&#34;the provider of Pilot DNS certificate.&#34;</span><span style="color:#000;font-weight:bold">).</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span>
+</code></pre></div><p>因此在默认使用<code>istiod</code>类型的情况下，上面的代码会从<code>./var/run/secrets/istio/root-cert.pem</code>中读取根证书内容，将其存入sa.RootCert字段中，然后创建caClient对象，并将其存入SecretFetcher的CaClient字段，代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">		<span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RootCert</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">rootCert</span>
+		<span style="color:#8f5902;font-style:italic">// Will use TLS unless the reserved 15010 port is used ( istiod on an ipsec/secure VPC)
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// rootCert may be nil - in which case the system roots are used, and the CA is expected to have public key
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// Otherwise assume the injection has mounted /etc/certs/root-cert.pem
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">caClient</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">citadel</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewCitadelClient</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAEndpoint</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">tls</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ClusterID</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CitadelClient</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">caClient</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>最后，会创建SecretCache对象，然后将其存入SDSAgent.WorkloadSecrets中。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to create secretFetcher for workload proxy: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Exit</span><span style="color:#000;font-weight:bold">(</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">ret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">UseCaClient</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+	<span style="color:#000">ret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaClient</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">caClient</span>
+
+	<span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TrustDomain</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TrustDomain</span>
+	<span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Pkcs8Keys</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Pkcs8Keys</span>
+	<span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ECCSigAlg</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ECCSigAlg</span>
+	<span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Plugins</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewPlugins</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PluginNames</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">OutputKeyCertToDir</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">OutputKeyCertToDir</span>
+	<span style="color:#000">workloadSecretCache</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewSecretCache</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NotifyProxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">WorkloadSecrets</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">workloadSecretCache</span>
+	<span style="color:#204a87;font-weight:bold">return</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>上面的流程是在SDSAgent.Start()中完成了SecretCache对象的创建</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sa</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SDSAgent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">isSidecar</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">podNamespace</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">workloadSecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">newSecretCache</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">workloadSecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">gatewaySecretCache</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>接下来分析SDS Server的创建和启动过程，创建和启动流程都在<code>sds.NewServer()</code></p>
+<h3 id="sds-server-">SDS Server</h3>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">options</span> <span style="color:#000">Options</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">workloadSecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">gatewaySecretCache</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretManager</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">workloadSds</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">newSDSService</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">workloadSecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">false</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">UseLocalJWT</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RecycleInterval</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JWTPath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">OutputKeyCertToDir</span><span style="color:#000;font-weight:bold">),</span>
+		<span style="color:#000">gatewaySds</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">newSDSService</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">gatewaySecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">UseLocalJWT</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RecycleInterval</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JWTPath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">OutputKeyCertToDir</span><span style="color:#000;font-weight:bold">),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnableWorkloadSDS</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initWorkloadSdsService</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">options</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to initialize secret discovery service for workload proxies: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;SDS gRPC server for workload UDS starts, listening on %q \n&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">WorkloadUDSPath</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnableIngressGatewaySDS</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initGatewaySdsService</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">options</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to initialize secret discovery service for ingress gateway: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;SDS gRPC server for ingress gateway controller starts, listening on %q \n&#34;</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">options</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IngressGatewayUDSPath</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>创建了2个sdsservice对象，分别存储于SDS Server的workloadSds和gatewaySds中，分别用于sidecar类型的envoy proxy和gateway类型的envoy proxy，创建的过程也非常简单。接着会调用<code>initWorkloadSdsService()</code>，这个函数仅仅是注册gRPC服务等操作。</p>
+<p>截止目前，所有的对象都已经创建完成，接下来会分析对于证书请求的处理过程。</p>
+<h2 id="三请求的处理流程-">三、请求的处理流程</h2>
+<p>在第一部分中描述了sdsservice实现了<code>SecretDiscoveryServiceServer</code>接口，主要是<code>StreamSecrets()</code>和<code>FetchSecrets()</code>这两个函数(只是使用方式不同，这两个函数的主体逻辑是一样的，这里只分析第一个函数)，用来接收envoy的证书请求，接下来分析具体的实现，代码位于<code>security/pkg/nodeagent/sds/sdsservice.go</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// StreamSecrets serves SDS discovery requests and SDS push requests
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sdsservice</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">StreamSecrets</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stream</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretDiscoveryService_StreamSecretsServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">receiveThread</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">receiveError</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">secret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">st</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenerateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">conID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">)</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pushSDS</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s Close connection. Failed to push key/cert to proxy %q: %v&#34;</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">conIDresourceNamePrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Id</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pushSDS</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s Close connection. Failed to push key/cert to proxy %q: %v&#34;</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">conIDresourceNamePrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">proxyID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这是这个函数整体的框架，收到请求后<code>go receiveThread()</code>会把请求的对象发送到<code>reqChannel</code>中，然后在接下来的代码中统一处理</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">node</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">core</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#8f5902;font-style:italic">// Block until a request is received.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>在select中会监听2个channel，分别处理客户端主动发起的请求，以及证书发生变化的情况下主动推送给客户证书的情况。</p>
+<h3 id="响应客户端请求-">响应客户端请求</h3>
+<p>先来看第一种，在第一次接受到Envoy的请求后，会进行一些初始化工作，将当前的连接加入到一个全局的map结构中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">conID</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#8f5902;font-style:italic">// first request
+</span><span style="color:#8f5902;font-style:italic"></span>				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#ce5c00;font-weight:bold">||</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Id</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s close connection. Missing Node ID in the first request&#34;</span><span style="color:#000;font-weight:bold">,</span>
+						<span style="color:#000">sdsLogPrefix</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">))</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;missing Node ID in the first request&#34;</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">conID</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">constructConnectionID</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Id</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">proxyID</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Id</span>
+				<span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">resourceName</span>
+				<span style="color:#000">key</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">ConnectionID</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">conID</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000">addConn</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">key</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000">firstRequestFlag</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+				<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s new connection&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">sdsLogPrefix</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">))</span>
+			<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">addConn</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">k</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">conn</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sdsConnection</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">sdsClientsMutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Lock</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#204a87;font-weight:bold">defer</span> <span style="color:#000">sdsClientsMutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">conIDresourceNamePrefix</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sdsLogPrefix</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">k</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Debugf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s add a new connection&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">conIDresourceNamePrefix</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">sdsClients</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">k</span><span style="color:#000;font-weight:bold">]</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">conn</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>接下来会读取ServiceAccount Token，下面代码中的<code>s.jwtPath</code>会被初始化为<code>/var/run/secrets/kubernetes.io/serviceaccount/token</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">localJWT</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#8f5902;font-style:italic">// Running in-process, no need to pass the token from envoy to agent as in-context - use the file
+</span><span style="color:#8f5902;font-style:italic"></span>				<span style="color:#000">tok</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">jwtPath</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to get credential token: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+				<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000">token</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tok</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">outputKeyCertToDir</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#8f5902;font-style:italic">// Using existing certs and the new SDS - skipToken case is for the old node agent.
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">!</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">skipToken</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">ctx</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">stream</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">()</span>
+				<span style="color:#000">t</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">getCredentialToken</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s Close connection. Failed to get credential token from &#34;</span><span style="color:#ce5c00;font-weight:bold">+</span>
+						<span style="color:#4e9a06">&#34;incoming request: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">conIDresourceNamePrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+				<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000">token</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">t</span>
+			<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>然后使用<code>GenerateSecret()</code>生成证书，并用<code>pushSDS()</code>将证书返回给Envoy。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#000">secret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">st</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenerateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">conID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">)</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pushSDS</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s Close connection. Failed to push key/cert to proxy %q: %v&#34;</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">conIDresourceNamePrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Id</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+			<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>生成证书的核心逻辑在<code>GenerateSecret()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">GenerateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connectionID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#8f5902;font-style:italic">// First try to generate secret from file.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">sdsFromFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateFileSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">sdsFromFile</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">resourceName</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#000">RootCertReqResourceName</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Now</span><span style="color:#000;font-weight:bold">())</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCertExpr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">getRootCert</span><span style="color:#000;font-weight:bold">()</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#000">ns</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">resourceName</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">RootCert</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ExpireTime</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">rootCertExpr</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Token</span><span style="color:#000;font-weight:bold">:</span>        <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">CreatedTime</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">t</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Version</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">t</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">String</span><span style="color:#000;font-weight:bold">(),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这个函数主体分为三个部分：</p>
+<ol>
+<li>首先从文件中读取，如果成功，则立即返回，执行函数为<code>generateFileSecret()</code>，会从<code>/etc/certs/</code>目录下读取证书文件，这就是概述一节中SDS Server手动注入数据面证书的内容对应的代码。如果执行成功，说明证书文件是手动注入的，这时再添加一个watch file的操作，持续监控证书文件，如果证书文件发生变化，则重新主动推送，详见下一节的内容。</li>
+<li>如果从文件中读取失败，说明证书需要动态生成，这时会首先判断客户端请求的证书是不是根证书，如果不是，则执行<code>generateSecret()</code>生成证书，然后返回。</li>
+<li>如果客户端请求的是根证书，则用<code>getRootCert()</code>获取根证书后返回。注意这一步获取的根证书也在刚才提到的<code>generateSecret()</code>中生成并保存的。</li>
+</ol>
+<p>从第2、3种情况中可以看出，代码核心逻辑在<code>generateSecret()</code>中，下面来详细分析这个函数</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">generateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span> <span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">t</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Time</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">exchangedToken</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">getExchangedToken</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><p>可以看出，首先使用token等信息生成一个exchange token</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">options</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pkiutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertOptions</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">Host</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">csrHostName</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">RSAKeySize</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">keySize</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">PKCS8Key</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">configOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Pkcs8Keys</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ECSigAlg</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">pkiutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SupportedECSignatureAlgorithms</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">configOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ECCSigAlg</span><span style="color:#000;font-weight:bold">),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">csrPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">keyPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pkiutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenCSR</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">options</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+</code></pre></div><p>然后使用<code>GenCSR()</code>生成私钥和证书签名请求文件。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">certChainPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">sendRetriableRequest</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">csrPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">exchangedToken</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><p>接着使用exchange token和私钥、证书签名请求文件等信息向Istiod中的CA Server发起证书签名请求。返回结果是签名后的证书。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">certChain</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">byte</span><span style="color:#000;font-weight:bold">{}</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">certChainPEM</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">certChain</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87">byte</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span><span style="color:#000;font-weight:bold">)</span><span style="color:#ce5c00;font-weight:bold">...</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">getRootCert</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#8f5902;font-style:italic">// Leaf cert is element &#39;0&#39;. Root cert is element &#39;n&#39;.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">rootCertChanged</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">!</span><span style="color:#000">bytes</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Equal</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87">byte</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certChainPEM</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">length</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">]))</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">rootCert</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#ce5c00;font-weight:bold">||</span> <span style="color:#000">rootCertChanged</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">rootCertExpireTime</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">nodeagentutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ParseCertAndGetExpiryTimestamp</span><span style="color:#000;font-weight:bold">([]</span><span style="color:#204a87">byte</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certChainPEM</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">length</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">]))</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">setRootCert</span><span style="color:#000;font-weight:bold">([]</span><span style="color:#204a87">byte</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certChainPEM</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">length</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">]),</span> <span style="color:#000">rootCertExpireTime</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s failed to parse root certificate in CSR response: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">logPrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">rootCertChanged</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">false</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">rootCertChanged</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Root cert has changed, start rotating root cert for SDS clients&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rotate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">true</span> <span style="color:#8f5902;font-style:italic">/*updateRootFlag*/</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这一段代码的含义是从签名后的证书中获取根证书，并和本地保存的根证书进行比较，如果结果不同或者本地没有根证书(发生在服务第一次的时候)，则使用新的根证书重设本地的根证书，并且当根证书发生改变之后，会通过<code>rotate()</code>轮换证书，即向客户端主动推送根证书。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">CertificateChain</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">PrivateKey</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">keyPEM</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Token</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">CreatedTime</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">t</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ExpireTime</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">expireTime</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Version</span><span style="color:#000;font-weight:bold">:</span>          <span style="color:#000">t</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Format</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;01-02 15:04:05.000&#34;</span><span style="color:#000;font-weight:bold">),</span> <span style="color:#8f5902;font-style:italic">// Precise enough version based on creation time.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000;font-weight:bold">},</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>最后将私钥和根证书以及token等信息返回。</p>
+<p>截止目前已经分析了SDS Server接受客户端请求并进行相应的整个过程，除了这种形式之外，SDS Server检测到证书发生改变之后，还会向客户端主动推送，这是下一节的内容。</p>
+<h3 id="主动推送-">主动推送</h3>
+<p>我们现在回到<code>StreamSecrets()</code>中，上一节讲述了相应客户端请求的情况，本节详细分析一下主动推送的情况</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">node</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">core</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#8f5902;font-style:italic">// Block until a request is received.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RLock</span><span style="color:#000;font-weight:bold">()</span>
+			<span style="color:#000">proxyID</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">proxyID</span>
+			<span style="color:#000">conID</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">conID</span>
+			<span style="color:#000">resourceName</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span>
+			<span style="color:#000">secret</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secret</span>
+			<span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RUnlock</span><span style="color:#000;font-weight:bold">()</span>
+
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">secret</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000;font-weight:bold">}</span>
+
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pushSDS</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">sdsServiceLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s Close connection. Failed to push key/cert to proxy %q: %v&#34;</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">conIDresourceNamePrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">proxyID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出，主动推送是通过<code>pushChannel</code>进行的，而且仅仅做一些错误检测，就直接执行<code>pushSDS()</code>了，因此说明在通过<code>pushChannel</code>接受到消息之前，<code>conn</code>对象已经包含了要发送的证书信息。</p>
+<p>一般这种通过回调函数执行的情况只需要关注两个地方</p>
+<ol>
+<li>回调函数的注册</li>
+<li>回调函数的触发</li>
+</ol>
+<p>我们首先看一下回调函数的注册，在创建<code>SecretCache</code>对象的时候</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sa</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SDSAgent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">newSecretCache</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverOptions</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Options</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">workloadSecretCache</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caClient</span> <span style="color:#000">caClientInterface</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Client</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">workloadSecretCache</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewSecretCache</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">sds</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NotifyProxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">workloadSdsCacheOptions</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">WorkloadSecrets</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">workloadSecretCache</span>
+	<span style="color:#204a87;font-weight:bold">return</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>注意<code>NewSecretCache()</code>的第二个参数其实就是回调函数</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NotifyProxy</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span> <span style="color:#000">cache</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">secret</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">conIDresourceNamePrefix</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sdsLogPrefix</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#000">conn</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sdsClients</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">]</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">conn</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Lock</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">conn</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secret</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">secret</span>
+	<span style="color:#000">conn</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">sdsClientsMutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#000">conn</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">sdsEvent</span><span style="color:#000;font-weight:bold">{}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出这个回调函数只是将<code>secret</code>(包含了私钥和根证书等信息)存到<code>conn</code>中，然后给<code>pushChannel</code>发送一个通知消息。</p>
+<p>将回调函数作为参数传递给<code>NewSecretCache()</code>后，内部会将回调函数保存到<code>SecretCache.notifyCallback</code>成员中。</p>
+<p>至此，回调函数的注册就结束了，接下来看如何触发这个回调函数。</p>
+<p>通过跟踪<code>SecretCache.notifyCallback</code>这个成员变量，发现它只使用在了一个地方</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">callbackWithTimeout</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span> <span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">secret</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">notifyCallback</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">secret</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}()</span>
+	<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">c</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#8f5902;font-style:italic">// completed normally
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">After</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">notifySecretRetrievalTimeout</span><span style="color:#000;font-weight:bold">):</span>
+		<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warnf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s notify secret change for proxy got timeout&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">logPrefix</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>触发这个回调函数实际上就是通过调用<code>callbackWithTimeout()</code>来实现的，主要有两个地方对其进行调用</p>
+<p>上一节分析SDS Server相应客户端请求的时候提到了如果发现有用户手动插入的证书，会优先使用，相关代码在<code>generateFileSecret()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">generateFileSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span> <span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">switch</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#8f5902;font-style:italic">// Default root certificate.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">RootCertReqResourceName</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rootCertificateExist</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingRootCertFile</span><span style="color:#000;font-weight:bold">):</span>
+		<span style="color:#000">sdsFromFile</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+		<span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateRootCertFromExistingFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingRootCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addFileWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingRootCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#8f5902;font-style:italic">// Default workload certificate.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">WorkloadKeyCertResourceName</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">keyCertificateExist</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingCertChainFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingKeyFile</span><span style="color:#000;font-weight:bold">):</span>
+		<span style="color:#000">sdsFromFile</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+		<span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateKeyCertFromExistingFiles</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingCertChainFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingKeyFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#8f5902;font-style:italic">// Adding cert is sufficient here as key can&#39;t change without changing the cert.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addFileWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">existingCertChainFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#8f5902;font-style:italic">// Check if the resource name refers to a file mounted certificate.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// Currently used in destination rules and server certs (via metadata).
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// Based on the resource name, we need to read the secret from a file encoded in the resource name.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pilotmodel</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SdsCertificateConfigFromResourceName</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">switch</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IsRootCertificate</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rootCertificateExist</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaCertificatePath</span><span style="color:#000;font-weight:bold">):</span>
+			<span style="color:#000">sdsFromFile</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+			<span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateRootCertFromExistingFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaCertificatePath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addFileWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaCertificatePath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IsKeyCertificate</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">keyCertificateExist</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertificatePath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PrivateKeyPath</span><span style="color:#000;font-weight:bold">):</span>
+			<span style="color:#000">sdsFromFile</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+			<span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateKeyCertFromExistingFiles</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertificatePath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PrivateKeyPath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#8f5902;font-style:italic">// Adding cert is sufficient here as key can&#39;t change without changing the cert.
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addFileWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertificatePath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">sdsFromFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看到这个函数里面有很多<code>addFileWatcher()</code>的调用</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">addFileWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">file</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span> <span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">timerC</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Time</span>
+		<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">timerC</span><span style="color:#000;font-weight:bold">:</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000">connKeys</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">fileCerts</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">npath</span><span style="color:#000;font-weight:bold">]</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">ckey</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">connKeys</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secrets</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Load</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ckey</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">ok</span> <span style="color:#000;font-weight:bold">{</span>
+						<span style="color:#8f5902;font-style:italic">// Regenerate the Secret and trigger the callback that pushes the secrets to proxy.
+</span><span style="color:#8f5902;font-style:italic"></span>						<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">secret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateFileSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ckey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+							<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%v: error in generating secret after file change [%s] %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ckey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">file</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+						<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+							<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%v: file changed, triggering secret push to proxy [%s]&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ckey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">file</span><span style="color:#000;font-weight:bold">)</span>
+							<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">callbackWithTimeout</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ckey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">secret</span><span style="color:#000;font-weight:bold">)</span>
+						<span style="color:#000;font-weight:bold">}</span>
+					<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">e</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certWatcher</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Events</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">file</span><span style="color:#000;font-weight:bold">):</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Op</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">String</span><span style="color:#000;font-weight:bold">())</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span> <span style="color:#8f5902;font-style:italic">// To avoid spurious events, mainly coming from tests.
+</span><span style="color:#8f5902;font-style:italic"></span>					<span style="color:#8f5902;font-style:italic">// Use a timer to debounce watch updates
+</span><span style="color:#8f5902;font-style:italic"></span>					<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">timerC</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+						<span style="color:#000">timerC</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">After</span><span style="color:#000;font-weight:bold">(</span><span style="color:#0000cf;font-weight:bold">100</span> <span style="color:#ce5c00;font-weight:bold">*</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Millisecond</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#8f5902;font-style:italic">// TODO: Make this configurable if needed.
+</span><span style="color:#8f5902;font-style:italic"></span>					<span style="color:#000;font-weight:bold">}</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}()</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>实际上就是通过<code>addFileWatcher()</code>来watch相关的证书文件，当发现文件改变之后，会调用<code>callbackWithTimeout()</code>。</p>
+<p>另一种情况是在证书轮换的时候，在上一节中分析到generateSecret()内部生成证书的之后，会检测新的根证书和本地缓存的证书是否一致，不一致的情况下会执行证书轮换工作</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">generateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">token</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span> <span style="color:#000">ConnKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">t</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Time</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">rootCertChanged</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Root cert has changed, start rotating root cert for SDS clients&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rotate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">true</span> <span style="color:#8f5902;font-style:italic">/*updateRootFlag*/</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SecretItem</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">CertificateChain</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">PrivateKey</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">keyPEM</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ResourceName</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Token</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">CreatedTime</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">t</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ExpireTime</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">expireTime</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Version</span><span style="color:#000;font-weight:bold">:</span>          <span style="color:#000">t</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Format</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;01-02 15:04:05.000&#34;</span><span style="color:#000;font-weight:bold">),</span> <span style="color:#8f5902;font-style:italic">// Precise enough version based on creation time.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000;font-weight:bold">},</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>在<code>rotate()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">sc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SecretCache</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">rotate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">updateRootFlag</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secrets</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Range</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">k</span> <span style="color:#204a87;font-weight:bold">interface</span><span style="color:#000;font-weight:bold">{},</span> <span style="color:#000">v</span> <span style="color:#204a87;font-weight:bold">interface</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#204a87;font-weight:bold">bool</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">updateRootFlag</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">callbackWithTimeout</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ns</span><span style="color:#000;font-weight:bold">)</span>
+
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">true</span>
+		<span style="color:#000;font-weight:bold">}</span>
+
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#8f5902;font-style:italic">// Re-generate secret if it&#39;s expired.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">shouldRotate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">secret</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">atomic</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AddUint64</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secretChangedCount</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#8f5902;font-style:italic">// Send the notification to close the stream if token is expired, so that client could re-connect with a new token.
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">isTokenExpired</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">secret</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">callbackWithTimeout</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#8f5902;font-style:italic">/*nil indicates close the streaming connection to proxy*/</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">true</span>
+			<span style="color:#000;font-weight:bold">}</span>
+
+			<span style="color:#000">wg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Add</span><span style="color:#000;font-weight:bold">(</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000">ns</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">generateSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Background</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">secret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">now</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">cacheLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s failed to rotate secret: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">logPrefix</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+					<span style="color:#204a87;font-weight:bold">return</span>
+				<span style="color:#000;font-weight:bold">}</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000">sc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">callbackWithTimeout</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">connKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ns</span><span style="color:#000;font-weight:bold">)</span>
+
+			<span style="color:#000;font-weight:bold">}()</span>
+		<span style="color:#000;font-weight:bold">}</span>
+
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">true</span>
+	<span style="color:#000;font-weight:bold">})</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出在<code>rotate()</code>中会根据情况直接调用回调函数来向客户端推送新证书，或者检测到证书过期后重新生成证书，然后再次通过执行回调函数来向客户端推送证书。这是第二个执行回调函数的地方。</p>
+<p>现在已经分析了如何SDS Server相应Envoy客户端的sds请求以及主动推送证书给客户端的情况。更多的细节请参考源代码，如发现有错误请及时联系，谢谢。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified January 4, 2017
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>

@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第一章 Agent主要组件及启动流程 | 郭栋的博客</title><meta property="og:title" content="第一章 Agent主要组件及启动流程" />
+<meta property="og:description" content="Pilot Agent主要作用是在内部启动一个envoy进程。
+概述 它包括几个部分
+  agent
+即Pilot Agent的主进程
+type agent struct { proxy Proxy activeEpochs map[int]chan error currentEpoch int statusCh chan exitStatus ... } agent会在内部跟踪启动的envoy进程，它包含了一个递增的全局变量currentEpoch用来记录最近启动/重启的envoy进程，每次重启的时候这个值都会加1。
+另外，在Pilot Agent中可能存在不止一个envoy进程，这种情况下就需要对它们进行记录和跟踪，成员变量activeEpochs就是用来做这个事的，它是dict类型，key就是每个envoy进程对应的currentEpoch的值，对应的value是一个channel，在需要退出的时候，agent通过这个channel来给对应的envoy发送信号。当activeEpochs为空的时候，整个Pilot Agent就会退出。
+在agent中还有一个名为statusCh的channel类型的成员，当envoy重启或者结束时，会通过这个channel向agent汇报结束状态。
+其中的proxy见下文描述。
+  proxy
+是对envoy进程的封装，是它负责把envoy进程运行起来，这个对象作为一个成员被包含在agent里。
+  watcher
+一个监视器，它会watch Pilot Agent pod挂载的证书文件，如果证书文件发生变化，它就会调用预先注册的agent.Restart()这个回调函数来重启envoy进程。
+  Secret discovery service (SDS) Agent
+一个SDS服务，负责与Istiod(Pilot Discovery)以及Envoy进程进行交换签名等操作。会在后面单独一个部分进行分析。
+  启动过程 入口在pilot/cmd/pilot-agent/main.go中，
+proxyCmd = &amp;cobra.Command{ Use: &#34;proxy&#34;, Short: &#34;Envoy proxy agent&#34;, RunE: func(c *cobra.Command, args []string) error { cmd." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/agent/agent/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
+<meta itemprop="name" content="第一章 Agent主要组件及启动流程">
+<meta itemprop="description" content="Pilot Agent主要作用是在内部启动一个envoy进程。
+概述 它包括几个部分
+  agent
+即Pilot Agent的主进程
+type agent struct { proxy Proxy activeEpochs map[int]chan error currentEpoch int statusCh chan exitStatus ... } agent会在内部跟踪启动的envoy进程，它包含了一个递增的全局变量currentEpoch用来记录最近启动/重启的envoy进程，每次重启的时候这个值都会加1。
+另外，在Pilot Agent中可能存在不止一个envoy进程，这种情况下就需要对它们进行记录和跟踪，成员变量activeEpochs就是用来做这个事的，它是dict类型，key就是每个envoy进程对应的currentEpoch的值，对应的value是一个channel，在需要退出的时候，agent通过这个channel来给对应的envoy发送信号。当activeEpochs为空的时候，整个Pilot Agent就会退出。
+在agent中还有一个名为statusCh的channel类型的成员，当envoy重启或者结束时，会通过这个channel向agent汇报结束状态。
+其中的proxy见下文描述。
+  proxy
+是对envoy进程的封装，是它负责把envoy进程运行起来，这个对象作为一个成员被包含在agent里。
+  watcher
+一个监视器，它会watch Pilot Agent pod挂载的证书文件，如果证书文件发生变化，它就会调用预先注册的agent.Restart()这个回调函数来重启envoy进程。
+  Secret discovery service (SDS) Agent
+一个SDS服务，负责与Istiod(Pilot Discovery)以及Envoy进程进行交换签名等操作。会在后面单独一个部分进行分析。
+  启动过程 入口在pilot/cmd/pilot-agent/main.go中，
+proxyCmd = &amp;cobra.Command{ Use: &#34;proxy&#34;, Short: &#34;Envoy proxy agent&#34;, RunE: func(c *cobra.Command, args []string) error { cmd.">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="544">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第一章 Agent主要组件及启动流程"/>
+<meta name="twitter:description" content="Pilot Agent主要作用是在内部启动一个envoy进程。
+概述 它包括几个部分
+  agent
+即Pilot Agent的主进程
+type agent struct { proxy Proxy activeEpochs map[int]chan error currentEpoch int statusCh chan exitStatus ... } agent会在内部跟踪启动的envoy进程，它包含了一个递增的全局变量currentEpoch用来记录最近启动/重启的envoy进程，每次重启的时候这个值都会加1。
+另外，在Pilot Agent中可能存在不止一个envoy进程，这种情况下就需要对它们进行记录和跟踪，成员变量activeEpochs就是用来做这个事的，它是dict类型，key就是每个envoy进程对应的currentEpoch的值，对应的value是一个channel，在需要退出的时候，agent通过这个channel来给对应的envoy发送信号。当activeEpochs为空的时候，整个Pilot Agent就会退出。
+在agent中还有一个名为statusCh的channel类型的成员，当envoy重启或者结束时，会通过这个channel向agent汇报结束状态。
+其中的proxy见下文描述。
+  proxy
+是对envoy进程的封装，是它负责把envoy进程运行起来，这个对象作为一个成员被包含在agent里。
+  watcher
+一个监视器，它会watch Pilot Agent pod挂载的证书文件，如果证书文件发生变化，它就会调用预先注册的agent.Restart()这个回调函数来重启envoy进程。
+  Secret discovery service (SDS) Agent
+一个SDS服务，负责与Istiod(Pilot Discovery)以及Envoy进程进行交换签名等操作。会在后面单独一个部分进行分析。
+  启动过程 入口在pilot/cmd/pilot-agent/main.go中，
+proxyCmd = &amp;cobra.Command{ Use: &#34;proxy&#34;, Short: &#34;Envoy proxy agent&#34;, RunE: func(c *cobra.Command, args []string) error { cmd."/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#概述-">概述</a></li>
+    <li><a href="#启动过程-">启动过程</a></li>
+    <li><a href="#深入分析-">深入分析</a></li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/agent/">Pilot Agent</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第一章 Agent主要组件及启动流程</h1>
+    
+	       
+	<figure><a href="../agent_1.png" target="_blank">
+    <img src="../agent_1.png"/> </a>
+</figure>
+
+<p>Pilot Agent主要作用是在内部启动一个envoy进程。</p>
+<h2 id="概述-">概述</h2>
+<p>它包括几个部分</p>
+<ul>
+<li>
+<p>agent</p>
+<p>即Pilot Agent的主进程</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">agent</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#000">proxy</span> <span style="color:#000">Proxy</span>
+    <span style="color:#000">activeEpochs</span> <span style="color:#204a87;font-weight:bold">map</span><span style="color:#000;font-weight:bold">[</span><span style="color:#204a87;font-weight:bold">int</span><span style="color:#000;font-weight:bold">]</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">error</span>
+    <span style="color:#000">currentEpoch</span> <span style="color:#204a87;font-weight:bold">int</span>
+    <span style="color:#000">statusCh</span> <span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#000">exitStatus</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>agent会在内部跟踪启动的envoy进程，它包含了一个递增的全局变量<code>currentEpoch</code>用来记录最近启动/重启的envoy进程，每次重启的时候这个值都会加1。</p>
+<p>另外，在Pilot Agent中可能存在不止一个envoy进程，这种情况下就需要对它们进行记录和跟踪，成员变量<code>activeEpochs</code>就是用来做这个事的，它是dict类型，key就是每个envoy进程对应的<code>currentEpoch</code>的值，对应的value是一个channel，在需要退出的时候，agent通过这个channel来给对应的envoy发送信号。当<code>activeEpochs</code>为空的时候，整个Pilot Agent就会退出。</p>
+<p>在agent中还有一个名为<code>statusCh</code>的channel类型的成员，当envoy重启或者结束时，会通过这个channel向agent汇报结束状态。</p>
+<p>其中的proxy见下文描述。</p>
+</li>
+<li>
+<p>proxy</p>
+<p>是对envoy进程的封装，是它负责把envoy进程运行起来，这个对象作为一个成员被包含在agent里。</p>
+</li>
+<li>
+<p>watcher</p>
+<p>一个监视器，它会watch Pilot Agent pod挂载的证书文件，如果证书文件发生变化，它就会调用预先注册的<code>agent.Restart()</code>这个回调函数来重启envoy进程。</p>
+</li>
+<li>
+<p>Secret discovery service (SDS) Agent</p>
+<p>一个SDS服务，负责与Istiod(Pilot Discovery)以及Envoy进程进行交换签名等操作。会在后面单独一个部分进行分析。</p>
+</li>
+</ul>
+<h2 id="启动过程-">启动过程</h2>
+<p>入口在<code>pilot/cmd/pilot-agent/main.go</code>中，</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">proxyCmd</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">Use</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#4e9a06">&#34;proxy&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Short</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;Envoy proxy agent&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">RunE</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PrintFlags</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Flags</span><span style="color:#000;font-weight:bold">())</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+</code></pre></div><ol>
+<li>
+<p>首先，会初始化一些变量，载入默认配置等等。</p>
+</li>
+<li>
+<p>接着会创建SDS Agent对象，并将其Run起来</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">         <span style="color:#000">sa</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">istio_agent</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewSDSAgent</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryAddress</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControlPlaneAuthPolicy</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">meshconfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AuthenticationPolicy_MUTUAL_TLS</span><span style="color:#000;font-weight:bold">,</span>
+         <span style="color:#ce5c00;font-weight:bold">...</span>
+         <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">sa</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">role</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Type</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SidecarProxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">podNamespaceVar</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+         <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+             <span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Fatala</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to start in-process SDS&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+         <span style="color:#000;font-weight:bold">}</span>
+</code></pre></div></li>
+<li>
+<p>然后根据配置，如果有证书文件需要watch，先等待他们ready</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">        <span style="color:#8f5902;font-style:italic">// dedupe cert paths so we don&#39;t set up 2 watchers for the same file
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#000">tlsCerts</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">dedupeStrings</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">getTLSCerts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">))</span>
+
+        <span style="color:#8f5902;font-style:italic">// Since Envoy needs the file-mounted certs for mTLS, we wait for them to become available
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#8f5902;font-style:italic">// before starting it.
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tlsCerts</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Monitored certs: %#v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">tlsCerts</span><span style="color:#000;font-weight:bold">)</span>
+            <span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">cert</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">tlsCerts</span> <span style="color:#000;font-weight:bold">{</span>
+                <span style="color:#000">waitForFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">2</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Minute</span><span style="color:#000;font-weight:bold">)</span>
+            <span style="color:#000;font-weight:bold">}</span>
+        <span style="color:#000;font-weight:bold">}</span>
+</code></pre></div></li>
+<li>
+<p>创建proxy对象和agent对象</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">         <span style="color:#000">envoyProxy</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewProxy</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProxyConfig</span><span style="color:#000;font-weight:bold">{</span>
+             <span style="color:#000">Config</span><span style="color:#000;font-weight:bold">:</span>              <span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">Node</span><span style="color:#000;font-weight:bold">:</span>                <span style="color:#000">role</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceNode</span><span style="color:#000;font-weight:bold">(),</span>
+             <span style="color:#000">LogLevel</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">proxyLogLevel</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">ComponentLogLevel</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">proxyComponentLogLevel</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">PilotSubjectAltName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">pilotSAN</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">MixerSubjectAltName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">mixerSAN</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">NodeIPs</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">role</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IPAddresses</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">PodName</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">podName</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">PodNamespace</span><span style="color:#000;font-weight:bold">:</span>        <span style="color:#000">podNamespace</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">PodIP</span><span style="color:#000;font-weight:bold">:</span>               <span style="color:#000">podIP</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">STSPort</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">stsPort</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">ControlPlaneAuth</span><span style="color:#000;font-weight:bold">:</span>    <span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControlPlaneAuthPolicy</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">meshconfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AuthenticationPolicy_MUTUAL_TLS</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">DisableReportCalls</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">disableInternalTelemetry</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">OutlierLogPath</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">outlierLogPath</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">pilotCertProvider</span><span style="color:#000;font-weight:bold">,</span>
+             <span style="color:#000">ProvCert</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">citadel</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProvCert</span><span style="color:#000;font-weight:bold">,</span>
+         <span style="color:#000;font-weight:bold">})</span>
+
+         <span style="color:#000">agent</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewAgent</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">envoyProxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TerminationDrainDuration</span><span style="color:#000;font-weight:bold">())</span>
+</code></pre></div></li>
+<li>
+<p>创建watcher并Run，这里将agent.Restart作为回调函数注册到了watcher对象里。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">         <span style="color:#8f5902;font-style:italic">// Watcher is also kicking envoy start.
+</span><span style="color:#8f5902;font-style:italic"></span>         <span style="color:#000">watcher</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tlsCerts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">agent</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Restart</span><span style="color:#000;font-weight:bold">)</span>
+         <span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">watcher</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div></li>
+<li>
+<p>最后，启动agent。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">         <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">agent</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div></li>
+</ol>
+<h2 id="深入分析-">深入分析</h2>
+<p>先来看agent.Run()</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">agent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Starting proxy agent&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">status</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">statusCh</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Lock</span><span style="color:#000;font-weight:bold">()</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">status</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Epoch %d exited with error: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">status</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">status</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Epoch %d exited normally&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">status</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000;font-weight:bold">}</span>
+
+			<span style="color:#204a87">delete</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">activeEpochs</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">status</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+
+			<span style="color:#000">active</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">activeEpochs</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">active</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;No more active epochs, terminating&#34;</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+			<span style="color:#000;font-weight:bold">}</span>
+
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%d active epochs running&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">active</span><span style="color:#000;font-weight:bold">)</span>
+
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Done</span><span style="color:#000;font-weight:bold">():</span>
+			<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">terminate</span><span style="color:#000;font-weight:bold">()</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Agent has successfully terminated&#34;</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>agent运行之后会监听agent.statusCh，在之前提到过，每当envoy进程退出时，会使用这个channel向agent汇报退出状态，这里可以看到当envoy退出时agent会删除agent.activeEpochs这个dict中的记录，然后重新检测这个dict，如果为空，则表明所有的envoy进程都已经退出，结束整个程序。</p>
+<p>可以看出envoy进程并不是由agent.Run()启动的，它的启动实际上是由wather来触发的。下面是watcher的结构</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">watcher</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">certs</span>   <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span>
+	<span style="color:#000">updates</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">interface</span><span style="color:#000;font-weight:bold">{})</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>watcher的结构非常简单，包含证书名称的一个数组和一个回调函数，下面详细看watcher对象的创建和运行过程。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#8f5902;font-style:italic">// Watcher is also kicking envoy start.
+</span><span style="color:#8f5902;font-style:italic"></span>			<span style="color:#000">watcher</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewWatcher</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tlsCerts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">agent</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Restart</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">watcher</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><p>在创建时将<code>agent.Restart</code>作为回调函数存储在<code>updates</code>字段中。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">w</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">watcher</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#8f5902;font-style:italic">// kick start the proxy with partial state (in case there are no notifications coming)
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">w</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SendConfig</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#8f5902;font-style:italic">// monitor certificates
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">watchCerts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">w</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certs</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">watchFileEvents</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">defaultMinDelay</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">w</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SendConfig</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Done</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Watcher has successfully terminated&#34;</span><span style="color:#000;font-weight:bold">)</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>watcher运行后会首先调用一次<code>SendConfig()</code>，然后又把<code>SendConfig()</code>作为回调函数执行了一个goroutine，即<code>watchFileEvents()</code>，这个函数的作用就是watch证书文件，监测到有变化的时候再次调用<code>SendConfig()</code>(注意不是立即调用，而是有一个计时器，每次调用间隔不小于<code>defaultMinDelay</code>)。</p>
+<p>下面看<code>SendConfig()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">w</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">watcher</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">SendConfig</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">h</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">sha256</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">New</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">generateCertHash</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">h</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">w</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certs</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">w</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">updates</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">h</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Sum</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">))</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>它会计算证书的sha256的值，然后将其作为参数调用<code>watcher.updates()</code>，也就是调用前文提到的已经注册的回调函数<code>agent.Restart()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">agent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Restart</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">config</span> <span style="color:#204a87;font-weight:bold">interface</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#8f5902;font-style:italic">// Only allow one restart to execute at a time.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">restartMutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Lock</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#204a87;font-weight:bold">defer</span> <span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">restartMutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#8f5902;font-style:italic">// Protect access to internal state.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Lock</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">reflect</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DeepEqual</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">currentConfig</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">config</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#8f5902;font-style:italic">// Same configuration - nothing to do.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+		<span style="color:#204a87;font-weight:bold">return</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">hasActiveEpoch</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">activeEpochs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span>
+	<span style="color:#000">activeEpoch</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">currentEpoch</span>
+
+	<span style="color:#8f5902;font-style:italic">// Increment the latest running epoch
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">epoch</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">currentEpoch</span> <span style="color:#ce5c00;font-weight:bold">+</span> <span style="color:#0000cf;font-weight:bold">1</span>
+	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Received new config, creating new Envoy epoch %d&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">currentEpoch</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">epoch</span>
+	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">currentConfig</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">config</span>
+
+	<span style="color:#8f5902;font-style:italic">// Add the new epoch to the map.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">abortCh</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">activeEpochs</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">currentEpoch</span><span style="color:#000;font-weight:bold">]</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">abortCh</span>
+
+	<span style="color:#8f5902;font-style:italic">// Unlock before the wait to avoid delaying envoy exit logic.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">mutex</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#8f5902;font-style:italic">// Wait for previous epoch to go live (if one exists) before performing a hot restart.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">hasActiveEpoch</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">waitUntilLive</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">activeEpoch</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">runWait</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">config</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">abortCh</span><span style="color:#000;font-weight:bold">)</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p><code>agent.Restart()</code>为启动envoy作一些准备工作，它会将watcher传回的证书文件的sha256的值存储到agent.currentConfig中，然后将epoch+1，将新的epoch和对应的channel注册到agent.activeEpochs中，然后再使用这两个值加上证书的sha256的值，这三个作为参数调用agent.runWait()来启动envoy。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// runWait runs the start-up command as a go routine and waits for it to finish
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">a</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">agent</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">runWait</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">config</span> <span style="color:#204a87;font-weight:bold">interface</span><span style="color:#000;font-weight:bold">{},</span> <span style="color:#000">epoch</span> <span style="color:#204a87;font-weight:bold">int</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">abortCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Epoch %d starting&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">config</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">abortCh</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Cleanup</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">a</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">statusCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span> <span style="color:#000">exitStatus</span><span style="color:#000;font-weight:bold">{</span><span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p><code>runWait()</code>内部会将这几个参数再次传递给<code>agent.Proxy.Run()</code>，就像本文开始所讲的，实际上envoy是由agent.Proxy来真正启动的。</p>
+<p>envoy运行结束后会通过agent.statusCh将退出信息传回proxy.Run()，后者会清除旧的envoy进程记录。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified January 4, 2017
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>

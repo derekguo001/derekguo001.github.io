@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第一章 概述 | 郭栋的博客</title><meta property="og:title" content="第一章 概述" />
+<meta property="og:description" content="概述 本章描述在Istio中进行证书管理的主要组件和流程。
+在阅读本文的同时可以参考以下一些非常优秀的文章，都来自于赵化冰的博客
+ 数字证书原理 一文带你彻底厘清 Kubernetes 中的证书工作机制 一文带你彻底厘清 Isito 中的证书工作机制  组件说明
+   在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。 上图中Pod A是用户的负载，伴随着Pod A是Istio注入的sidecar，启动的主进程被称为Pilot Agent，它核心的功能是启动Envoy进程来劫持并管理Pod A的进出口流量，除此之外，在Pilot Agent还有一个名为SDS Server的组件，用来生成私钥和证书签名请求文件并向CA Server发起证书签名请求。 CA Server和SDS Server通信时，需要验证对方的身份，这时双方都需要有一个公共的CA根证书，这个根证书最初由CA Server在启动时创建，并存储于Kubernetes一个名为istio-ca-root-cert的ConfigMap对象中。这个ConfigMap会在注入sidecar时，挂载到sidecar的/var/run/secrets/istio目录中，随后当SDS Server与CA Server交互时会读取这个根证书，并用它创建client然后进行通信。  主要的流程如下
+ 当Envoy进程在与其它Envoy进程交互时，发现需要进行TLS认证，它会从静态配置文件或者动态配置服务器获取证书的名称等相关信息，这时Envoy进程就会通过SDS API向Pilot Agent中的SDS Server发起请求获取证书 SDS Server收到请求后，会首先读取本地的ServiceAccount Token，路径为/var/run/secrets/kubernetes.io/serviceaccount/token，然后从token中解析出namespace和ServiceAccount等信息，再用这些信息生成私钥和证书签名请求文件。接下来使用证书签名请求文件作为参数，向Istiod发起申请证书签名的请求 Istiod中的CA Server收到请求后会对其中的凭证进行验证，通过后会对根据请求对证书进行签名、生成证书，并将签名后的数字证书发送给SDS Server SDS Server将私钥和从CA Server处获得的证书一起通过SDS API发送给Envoy 以上过程会周期性地重复执行以便实现证书的轮换  CA Server Istiod内部的CA Server用来提供证书签名服务。
+内部管理4个证书，都会挂载到/etc/cacerts/目录下
+   路径 证书名称     /etc/cacerts/ca-key.pem ca私钥   /etc/cacerts/ca-cert.pem ca证书   /etc/cacerts/ca-chain." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/certificate/intro/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
+<meta itemprop="name" content="第一章 概述">
+<meta itemprop="description" content="概述 本章描述在Istio中进行证书管理的主要组件和流程。
+在阅读本文的同时可以参考以下一些非常优秀的文章，都来自于赵化冰的博客
+ 数字证书原理 一文带你彻底厘清 Kubernetes 中的证书工作机制 一文带你彻底厘清 Isito 中的证书工作机制  组件说明
+   在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。 上图中Pod A是用户的负载，伴随着Pod A是Istio注入的sidecar，启动的主进程被称为Pilot Agent，它核心的功能是启动Envoy进程来劫持并管理Pod A的进出口流量，除此之外，在Pilot Agent还有一个名为SDS Server的组件，用来生成私钥和证书签名请求文件并向CA Server发起证书签名请求。 CA Server和SDS Server通信时，需要验证对方的身份，这时双方都需要有一个公共的CA根证书，这个根证书最初由CA Server在启动时创建，并存储于Kubernetes一个名为istio-ca-root-cert的ConfigMap对象中。这个ConfigMap会在注入sidecar时，挂载到sidecar的/var/run/secrets/istio目录中，随后当SDS Server与CA Server交互时会读取这个根证书，并用它创建client然后进行通信。  主要的流程如下
+ 当Envoy进程在与其它Envoy进程交互时，发现需要进行TLS认证，它会从静态配置文件或者动态配置服务器获取证书的名称等相关信息，这时Envoy进程就会通过SDS API向Pilot Agent中的SDS Server发起请求获取证书 SDS Server收到请求后，会首先读取本地的ServiceAccount Token，路径为/var/run/secrets/kubernetes.io/serviceaccount/token，然后从token中解析出namespace和ServiceAccount等信息，再用这些信息生成私钥和证书签名请求文件。接下来使用证书签名请求文件作为参数，向Istiod发起申请证书签名的请求 Istiod中的CA Server收到请求后会对其中的凭证进行验证，通过后会对根据请求对证书进行签名、生成证书，并将签名后的数字证书发送给SDS Server SDS Server将私钥和从CA Server处获得的证书一起通过SDS API发送给Envoy 以上过程会周期性地重复执行以便实现证书的轮换  CA Server Istiod内部的CA Server用来提供证书签名服务。
+内部管理4个证书，都会挂载到/etc/cacerts/目录下
+   路径 证书名称     /etc/cacerts/ca-key.pem ca私钥   /etc/cacerts/ca-cert.pem ca证书   /etc/cacerts/ca-chain.">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="727">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第一章 概述"/>
+<meta name="twitter:description" content="概述 本章描述在Istio中进行证书管理的主要组件和流程。
+在阅读本文的同时可以参考以下一些非常优秀的文章，都来自于赵化冰的博客
+ 数字证书原理 一文带你彻底厘清 Kubernetes 中的证书工作机制 一文带你彻底厘清 Isito 中的证书工作机制  组件说明
+   在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。 上图中Pod A是用户的负载，伴随着Pod A是Istio注入的sidecar，启动的主进程被称为Pilot Agent，它核心的功能是启动Envoy进程来劫持并管理Pod A的进出口流量，除此之外，在Pilot Agent还有一个名为SDS Server的组件，用来生成私钥和证书签名请求文件并向CA Server发起证书签名请求。 CA Server和SDS Server通信时，需要验证对方的身份，这时双方都需要有一个公共的CA根证书，这个根证书最初由CA Server在启动时创建，并存储于Kubernetes一个名为istio-ca-root-cert的ConfigMap对象中。这个ConfigMap会在注入sidecar时，挂载到sidecar的/var/run/secrets/istio目录中，随后当SDS Server与CA Server交互时会读取这个根证书，并用它创建client然后进行通信。  主要的流程如下
+ 当Envoy进程在与其它Envoy进程交互时，发现需要进行TLS认证，它会从静态配置文件或者动态配置服务器获取证书的名称等相关信息，这时Envoy进程就会通过SDS API向Pilot Agent中的SDS Server发起请求获取证书 SDS Server收到请求后，会首先读取本地的ServiceAccount Token，路径为/var/run/secrets/kubernetes.io/serviceaccount/token，然后从token中解析出namespace和ServiceAccount等信息，再用这些信息生成私钥和证书签名请求文件。接下来使用证书签名请求文件作为参数，向Istiod发起申请证书签名的请求 Istiod中的CA Server收到请求后会对其中的凭证进行验证，通过后会对根据请求对证书进行签名、生成证书，并将签名后的数字证书发送给SDS Server SDS Server将私钥和从CA Server处获得的证书一起通过SDS API发送给Envoy 以上过程会周期性地重复执行以便实现证书的轮换  CA Server Istiod内部的CA Server用来提供证书签名服务。
+内部管理4个证书，都会挂载到/etc/cacerts/目录下
+   路径 证书名称     /etc/cacerts/ca-key.pem ca私钥   /etc/cacerts/ca-cert.pem ca证书   /etc/cacerts/ca-chain."/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#概述-">概述</a></li>
+    <li><a href="#ca-server">CA Server</a></li>
+    <li><a href="#sds-server-">SDS Server</a></li>
+    <li><a href="#数据面证书-">数据面证书</a></li>
+    <li><a href="#控制面认证-">控制面认证</a></li>
+    <li><a href="#jwt-token文件-">JWT Token文件</a>
+      <ul>
+        <li><a href="#ca-server-">CA Server</a></li>
+        <li><a href="#sds-server--1">SDS Server</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/certificate/">证书管理</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第一章 概述</h1>
+    
+	       
+	<h2 id="概述-">概述</h2>
+<p>本章描述在Istio中进行证书管理的主要组件和流程。</p>
+<p>在阅读本文的同时可以参考以下一些非常优秀的文章，都来自于赵化冰的博客</p>
+<ul>
+<li><a href="https://zhaohuabing.com/post/2020-03-19-pki/">数字证书原理</a></li>
+<li><a href="https://zhaohuabing.com/post/2020-05-19-k8s-certificate/">一文带你彻底厘清 Kubernetes 中的证书工作机制</a></li>
+<li><a href="https://zhaohuabing.com/post/2020-05-25-istio-certificate/">一文带你彻底厘清 Isito 中的证书工作机制</a></li>
+</ul>
+<p>组件说明</p>
+<figure><a href="../ca_1.png" target="_blank">
+    <img src="../ca_1.png" width="80%"/> </a>
+</figure>
+
+<ul>
+<li>在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。</li>
+<li>上图中Pod A是用户的负载，伴随着Pod A是Istio注入的sidecar，启动的主进程被称为Pilot Agent，它核心的功能是启动Envoy进程来劫持并管理Pod A的进出口流量，除此之外，在Pilot Agent还有一个名为SDS Server的组件，用来生成私钥和证书签名请求文件并向CA Server发起证书签名请求。</li>
+<li>CA Server和SDS Server通信时，需要验证对方的身份，这时双方都需要有一个公共的CA根证书，这个根证书最初由CA Server在启动时创建，并存储于Kubernetes一个名为istio-ca-root-cert的ConfigMap对象中。这个ConfigMap会在注入sidecar时，挂载到sidecar的<code>/var/run/secrets/istio</code>目录中，随后当SDS Server与CA Server交互时会读取这个根证书，并用它创建client然后进行通信。</li>
+</ul>
+<p>主要的流程如下</p>
+<ol>
+<li>当Envoy进程在与其它Envoy进程交互时，发现需要进行TLS认证，它会从静态配置文件或者动态配置服务器获取证书的名称等相关信息，这时Envoy进程就会通过SDS API向Pilot Agent中的SDS Server发起请求获取证书</li>
+<li>SDS Server收到请求后，会首先读取本地的ServiceAccount Token，路径为<code>/var/run/secrets/kubernetes.io/serviceaccount/token</code>，然后从token中解析出namespace和ServiceAccount等信息，再用这些信息生成私钥和证书签名请求文件。接下来使用证书签名请求文件作为参数，向Istiod发起申请证书签名的请求</li>
+<li>Istiod中的CA Server收到请求后会对其中的凭证进行验证，通过后会对根据请求对证书进行签名、生成证书，并将签名后的数字证书发送给SDS Server</li>
+<li>SDS Server将私钥和从CA Server处获得的证书一起通过SDS API发送给Envoy</li>
+<li>以上过程会周期性地重复执行以便实现证书的轮换</li>
+</ol>
+<h2 id="ca-server">CA Server</h2>
+<p>Istiod内部的CA Server用来提供证书签名服务。</p>
+<p>内部管理4个证书，都会挂载到<code>/etc/cacerts/</code>目录下</p>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>证书名称</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>/etc/cacerts/ca-key.pem</td>
+<td>ca私钥</td>
+</tr>
+<tr>
+<td>/etc/cacerts/ca-cert.pem</td>
+<td>ca证书</td>
+</tr>
+<tr>
+<td>/etc/cacerts/ca-chain.pem</td>
+<td>ca证书链</td>
+</tr>
+<tr>
+<td>/etc/cacerts/root-cert.pem</td>
+<td>根证书</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>ca证书用于给集群中的工作负载进行签名，即对Pilog Agent发起的CSR请求进行签名</li>
+<li>ca证书和ca私钥必须由根证书签名</li>
+<li>ca证书链是ca证书与根证书之间的信任链</li>
+</ul>
+<p>这些证书有两种方式来创建</p>
+<ol>
+<li>自动生成，这种被称为自签名证书，这是默认的方式</li>
+<li>用户手动创建，即手动插入已存在的CA证书。可以在部署Istiod前使用已存在的证书在istio-system中创建名为cacerts的secret，然后istio部署的时候会自动使用这个secret中的证书，具体可以参考Istio官方手册 <a href="https://istio.io/latest/docs/tasks/security/cert-management/plugin-ca-cert/">Plugging in existing CA Certificates</a></li>
+</ol>
+<p>有2个函数可以用来处理Pilot Agent发送过来的CSR请求。<code>CreateCertificate()</code>和<code>HandleCSR()</code>，其中第二个被标记为过时的。</p>
+<p>CA Server中涉及到了很多相关的Kubernetes资源，现整理如下</p>
+<ul>
+<li>
+<p>istio-ca-secret secret</p>
+<p>位于istio-system中，用来持久化保存自签名的ca私钥和ca证书，其它字段都为空，只由Istiod使用，与Pilot Agent没有关系</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#ce5c00;font-weight:bold">[</span>root@master1 ~<span style="color:#ce5c00;font-weight:bold">]</span><span style="color:#8f5902;font-style:italic"># kubectl get secret istio-ca-secret -n istio-system -o yaml</span>
+apiVersion: v1
+data:
+  ca-cert.pem: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0t...
+  ca-key.pem: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLR...
+  cert-chain.pem: <span style="color:#4e9a06">&#34;&#34;</span>
+  key.pem: <span style="color:#4e9a06">&#34;&#34;</span>
+  root-cert.pem: <span style="color:#4e9a06">&#34;&#34;</span>
+kind: Secret
+metadata:
+  creationTimestamp: <span style="color:#4e9a06">&#34;2020-05-25T07:31:18Z&#34;</span>
+  name: istio-ca-secret
+  namespace: istio-system
+  resourceVersion: <span style="color:#4e9a06">&#34;2448&#34;</span>
+  selfLink: /api/v1/namespaces/istio-system/secrets/istio-ca-secret
+  uid: b58371c8-9822-4b37-94a1-dd92cf8de43d
+type: istio.io/ca-root
+</code></pre></div></li>
+<li>
+<p>istio-ca-root-cert configmap</p>
+<p>每个namespace中都会有一个，用于保存根证书，会挂载到Pilot Agent的<code>/var/run/secrets/istio</code>目录</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash"><span style="color:#ce5c00;font-weight:bold">[</span>root@master1 ~<span style="color:#ce5c00;font-weight:bold">]</span><span style="color:#8f5902;font-style:italic"># kubectl get cm istio-ca-root-cert -n istio-system -o yaml</span>
+apiVersion: v1
+data:
+  root-cert.pem: <span style="color:#000;font-weight:bold">|</span>
+    -----BEGIN CERTIFICATE-----
+    MIIC3jCCAcagAwIBAgIRANmOZWfMlXfWKMj1xqISuCIwDQYJKoZIhvcNAQELBQAw
+    ...
+    -----END CERTIFICATE-----
+kind: ConfigMap
+metadata:
+  creationTimestamp: <span style="color:#4e9a06">&#34;2020-05-25T07:31:19Z&#34;</span>
+  labels:
+    istio.io/config: <span style="color:#4e9a06">&#34;true&#34;</span>
+  name: istio-ca-root-cert
+  namespace: istio-system
+  resourceVersion: <span style="color:#4e9a06">&#34;2473&#34;</span>
+  selfLink: /api/v1/namespaces/istio-system/configmaps/istio-ca-root-cert
+  uid: ce0fdfa7-0be5-4575-a0c6-1a2c053266f8
+<span style="color:#ce5c00;font-weight:bold">[</span>root@master1 ~<span style="color:#ce5c00;font-weight:bold">]</span>#
+</code></pre></div></li>
+<li>
+<p>istio-security configmap</p>
+<p>位于istio-system中，用来保存根证书。之前使用在nodeagent中，目前nodeagent已经集成到Pilot Agent中，根证书改为从istio-ca-root-cert configmap中获取，目前代码有注释说明保留这个只是为了向前兼容，代码中并没有实际使用，以后会从代码中完全移除</p>
+</li>
+<li>
+<p>cacerts secret</p>
+<p>会挂载到Istiod的<code>/etc/cacerts</code>目录，用户可以手动通过现有证书创建这个secret，然后再部署Istio，这样Istio就可以使用用户指定的证书</p>
+</li>
+</ul>
+<h2 id="sds-server-">SDS Server</h2>
+<p>Pilot Agent中的SDS Server与Istiod内部的CA Server进行通信时，双方都需要有一个根证书，根据配置的不同，这个根证书有几种不同的获取方式，对应的类型名称为分别为<code>istiod</code>、<code>kubernetes</code>和<code>custom</code></p>
+<table>
+<thead>
+<tr>
+<th>配置的类型名称</th>
+<th>说明</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>istiod</td>
+<td>使用Istiod根证书</td>
+<td>这是默认的方式，会从pod中以下位置读取<code>/var/run/secrets/istio/root-cert.pem</code>，这个文件夹是istio-ca-root-cert的ConfigMap挂载到pod上的内容，这个ConfigMap实际上是Istiod中的CA Server创建的。这就是本文中之前一直提到的默认的方式</td>
+</tr>
+<tr>
+<td>kubernetes</td>
+<td>使用Kubernetes根证书</td>
+<td>会从pod中以下位置读取<code>/var/run/secrets/kubernetes.io/serviceaccount/ca.crt</code></td>
+</tr>
+<tr>
+<td>custom</td>
+<td>使用自定义证书</td>
+<td>会从<code>/etc/certs/root-cert.pem</code>中读取。</td>
+</tr>
+</tbody>
+</table>
+<p>下面来看一下注入的sidecar的模板文件</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">&#34;global&#34;: </span>{<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">&#34;pilotCertProvider&#34;: </span><span style="color:#4e9a06">&#34;istiod&#34;</span><span style="color:#000;font-weight:bold">,</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">template</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#8f5902;font-style:italic">|
+</span><span style="color:#8f5902;font-style:italic">        ...</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">env</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>PILOT_CERT_PROVIDER<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">value</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>{{<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.pilotCertProvider<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">volumeMounts</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.pilotCertProvider<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;istiod&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">mountPath</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>/var/run/secrets/istio<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istiod-ca-cert<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">volumes</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.pilotCertProvider<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;istiod&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istiod-ca-cert<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">configMap</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-ca-root-cert<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>可以看出在部署的时候是通过<code>pilotCertProvider</code>这个参数来控制的，默认值是<code>istiod</code>，在模板文件中会将这个参数的值设置到环境变量<code>PILOT_CERT_PROVIDER</code>中。当这个值是<code>istiod</code>的情况下，会将<code>istio-ca-root-cert</code>这个configmap挂载到<code>/var/run/secrets/istio</code>目录中。</p>
+<h2 id="数据面证书-">数据面证书</h2>
+<p>数据面证书是指Envoy与Envoy通信时需要的证书，这些证书是Envoy通过向Pilot Agent中的SDS Server发起SDS请求获取的，而SDS Server内部获取这些证书的方式其实有两种：</p>
+<ol>
+<li>
+<p>SDS Server内部生成私钥和证书签名请求文件，然后再向Istiod内部的CA Server发起签名请求，最后将签名后的证书和私钥一起发送给Envoy。这就是前文中一直提到的情况，也是默认值。</p>
+</li>
+<li>
+<p>SDS Server读取挂载的静态证书文件，将这些</p>
+<p>下面来看一下注入的sidecar的模板文件</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">&#34;global&#34;: </span>{<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">&#34;mountMtlsCerts&#34;: </span><span style="color:#204a87;font-weight:bold">false</span><span style="color:#000;font-weight:bold">,</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">template</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#8f5902;font-style:italic">|
+</span><span style="color:#8f5902;font-style:italic">        ...</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">volumeMounts</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.mountMtlsCerts<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#8f5902;font-style:italic"># Use the key and cert mounted to /etc/certs/ for the in-cluster mTLS communications.</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">mountPath</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>/etc/certs/<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-certs<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">readOnly</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">true</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">volumes</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.mountMtlsCerts<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#8f5902;font-style:italic"># Use the key and cert mounted to /etc/certs/ for the in-cluster mTLS communications.</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-certs<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">secret</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">optional</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">true</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>{{<span style="color:#f8f8f8;text-decoration:underline"> </span>if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Spec.ServiceAccountName<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">secretName</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio.default<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>{{<span style="color:#f8f8f8;text-decoration:underline"> </span>else<span style="color:#f8f8f8;text-decoration:underline"> </span>-}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">secretName</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>{{<span style="color:#f8f8f8;text-decoration:underline">  </span>printf<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;istio.%s&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>.Spec.ServiceAccountName<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>{{<span style="color:#f8f8f8;text-decoration:underline">  </span>end<span style="color:#f8f8f8;text-decoration:underline"> </span>-}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>如果是这种手动插入证书的方式，则SDS Server会将用户配置的证书直接返回给Envoy，而不是像前一种情况那样本地生成私钥和证书签名请求然后向CA Server申请签名。</p>
+</li>
+</ol>
+<h2 id="控制面认证-">控制面认证</h2>
+<p>Istiod中的CA Server和Pilot Agent中的SDS Server通信时，需要互相认证对方的身份。</p>
+<p>SDS Server对CA Server认证的方式是标准的TLS认证，即CA Server启动时会配置相应的证书，在交互前进行认证时，会将证书发送给SDS Server，后者对其进行验证。</p>
+<p>CA Server对SDS Server的认证有不止一种方式</p>
+<table>
+<thead>
+<tr>
+<th>认证类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ClientCertAuthenticator</td>
+<td>客户端证书认证</td>
+</tr>
+<tr>
+<td>IDTokenAuthenticator</td>
+<td>通过OpenID Connect (OIDC) 对客户端请求中的<code>Bearer</code>中的JWT Token进行认证，用于google公有云</td>
+</tr>
+<tr>
+<td>KubeJWTAuthenticator</td>
+<td>通过kubeclient向Kubernetes API Server发起验证请求，验证请求中的JWT Token</td>
+</tr>
+<tr>
+<td>jwtAuthenticator</td>
+<td>通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token，主要用于Istiod部署于Kubernetes集群之外的场景</td>
+</tr>
+</tbody>
+</table>
+<p>第一种方式使用客户端证书认证进行认证，实际上这时并不会进行真正的认证，只是在当前已经通过证书认证的前提下，从证书中提取出一些对象来供后续使用。</p>
+<p>另外需要注意的是这些认证方式如果启用多个的话，只要其中有一个认证通过，就会被认为是总体认证通过。</p>
+<h2 id="jwt-token文件-">JWT Token文件</h2>
+<p>在CA Server和SDS Server之间进行控制面认证时，会使用一个ServiceAccount Token，Kubernetes支持两种类型</p>
+<ul>
+<li>
+<p>first-party-jwt</p>
+<p>这是默认的情况，没有过期时间，ServiceAccount的jwt token文件挂载到每个pod中。这种情况有一些安全风险。可参见 <a href="https://www.alibabacloud.com/help/zh/doc-detail/160384.htm?admitad_uid=25d4c1c226ee0b89e4b674c63a38c56d&amp;admitad_pubid=235249">部署服务账户令牌卷投影</a></p>
+</li>
+<li>
+<p>third-party-jwt</p>
+<p>可以指定ServiceAccount的jwt token中的audience和过期时间字段。默认配置中Kubernetes是不会使用这个特性，可以按照 <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#service-account-token-volume-projection">Service Account Token Volume Projection</a> 所述来开启这个特性。</p>
+</li>
+</ul>
+<p>这个值在Istio中可以通过JWT_POLICY环境变量来配置(CA Server和SDS Server都是通过这个环境变量进行配置)，默认值是third-party-jwt。在部署时Istio会检测Kubernetes是否已经开启了这个特性，如果没有开启时，并且用户明确配置了要使用这种方式，会发出一个警告信息，然后回退到first-party-jwt模式。</p>
+<p>当使用first-party-jwt模式，JWT Token解析后的中间部分的内容如下，第一个是CA Server中，第二个是SDS Server中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#000;font-weight:bold">{</span>
+  <span style="color:#204a87;font-weight:bold">&#34;iss&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;kubernetes/serviceaccount&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/namespace&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;istio-system&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/secret.name&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;istiod-service-account-token-97p6c&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/service-account.name&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;istiod-service-account&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/service-account.uid&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;effcaa6c-0595-4320-9897-e9f9bb9a411d&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;sub&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;system:serviceaccount:istio-system:istiod-service-account&#34;</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json"><span style="color:#000;font-weight:bold">{</span>
+  <span style="color:#204a87;font-weight:bold">&#34;iss&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;kubernetes/serviceaccount&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/namespace&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;foo&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/secret.name&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;httpbin-token-c4mdk&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/service-account.name&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;httpbin&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;kubernetes.io/serviceaccount/service-account.uid&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;22ef4914-614d-4d04-aa3a-7cd0f3ce3a78&#34;</span><span style="color:#000;font-weight:bold">,</span>
+  <span style="color:#204a87;font-weight:bold">&#34;sub&#34;</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;system:serviceaccount:foo:httpbin&#34;</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>下面分别针对CA Server和SDS Server，看下其中的JWT Token文件是如何配置和使用的。</p>
+<h3 id="ca-server-">CA Server</h3>
+<p>部署时，CA Server中相关配置如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">containers</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>discovery<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">args</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>- <span style="color:#4e9a06">&#34;discovery&#34;</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>JWT_POLICY<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">            </span><span style="color:#204a87;font-weight:bold">value</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>{{<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.jwtPolicy<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">volumeMounts</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.jwtPolicy<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;third-party-jwt&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-token<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">            </span><span style="color:#204a87;font-weight:bold">mountPath</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>/var/run/secrets/tokens<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">            </span><span style="color:#204a87;font-weight:bold">readOnly</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">true</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">volumes</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.jwtPolicy<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;third-party-jwt&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-token<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">projected</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">sources</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">            </span>- <span style="color:#204a87;font-weight:bold">serviceAccountToken</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">                </span><span style="color:#204a87;font-weight:bold">audience</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>{{<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.sds.token.aud<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">                </span><span style="color:#204a87;font-weight:bold">expirationSeconds</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#0000cf;font-weight:bold">43200</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">                </span><span style="color:#204a87;font-weight:bold">path</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-token<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>如果是采用third-party-jwt模式，则会为jwt token设置一个过期时间和audience值，并且将其挂载到<code>/var/run/secrets/tokens</code>路径下</p>
+<p>在Istiod启动时根据配置会读取相关文件</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#8f5902;font-style:italic">// ThirdPartyJWTPath is the well-known location of the projected K8S JWT. This is mounted on all workloads, as well as istiod.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">ThirdPartyJWTPath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;./var/run/secrets/tokens/istio-token&#34;</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#8f5902;font-style:italic">// K8sSAJwtFileName is the token volume mount file name for k8s jwt token.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">K8sSAJwtFileName</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;/var/run/secrets/kubernetes.io/serviceaccount/token&#34;</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;JWT policy is %s&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JwtPolicy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+	<span style="color:#204a87;font-weight:bold">switch</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JwtPolicy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">jwt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JWTPolicyThirdPartyJWT</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">jwtPath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ThirdPartyJWTPath</span>
+	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">jwt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JWTPolicyFirstPartyJWT</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">jwtPath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">securityModel</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">K8sSAJwtFileName</span>
+	<span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;invalid JWT policy %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JwtPolicy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>最终会用于CA Server与SDS Server进行互相认证的时候，代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">	<span style="color:#000">ch</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span>
+	<span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">jwtPath</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">tok</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">detectAuthEnv</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">token</span><span style="color:#000;font-weight:bold">))</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warna</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Starting with invalid K8S JWT token&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">token</span><span style="color:#000;font-weight:bold">))</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">iss</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Iss</span>
+			<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Aud</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">aud</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">aud</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Aud</span><span style="color:#000;font-weight:bold">[</span><span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">]</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#8f5902;font-style:italic">// TODO: if not set, parse Istiod&#39;s own token (if present) and get the issuer. The same issuer is used
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// for all tokens - no need to configure twice. The token may also include cluster info to auto-configure
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// networking properties.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#8f5902;font-style:italic">// issuer set explicitly or extracted from our own JWT
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">k8sInCluster</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span> <span style="color:#8f5902;font-style:italic">// not running in cluster - in cluster use direct call to apiserver
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// Add a custom authenticator using standard JWT validation, if not running in K8S
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#8f5902;font-style:italic">// When running inside K8S - we can use the built-in validator, which also check pod removal (invalidation).
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">oidcAuth</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">newJwtAuthenticator</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">iss</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TrustDomain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">aud</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">oidcAuth</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using out-of-cluster JWT authentication&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;K8S token doesn&#39;t support OIDC, using only in-cluster auth&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>代码逻辑是如果读取了JWT Token中相关数据并且Istiod不在Kubernetes集群中运行，会启用jwtAuthenticator这种认证方式，CA Server会通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token。</p>
+<h3 id="sds-server--1">SDS Server</h3>
+<p>在Pilot Agent部署时也类似于Istiod，如果是采用third-party-jwt模式，则会为jwt token设置一个过期时间和audience值，并且将其挂载到<code>/var/run/secrets/tokens</code>路径下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">containers</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-proxy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">ports</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">containerPort</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#0000cf;font-weight:bold">15090</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">protocol</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>TCP<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>http-envoy-prom<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">args</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- proxy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- sidecar<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">volumeMounts</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.jwtPolicy<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;third-party-jwt&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>- <span style="color:#204a87;font-weight:bold">mountPath</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>/var/run/secrets/tokens<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-token<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>...<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">volumes</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- if<span style="color:#f8f8f8;text-decoration:underline"> </span>eq<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.jwtPolicy<span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#4e9a06">&#34;third-party-jwt&#34;</span><span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>- <span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-token<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">projected</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span><span style="color:#204a87;font-weight:bold">sources</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">          </span>- <span style="color:#204a87;font-weight:bold">serviceAccountToken</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">              </span><span style="color:#204a87;font-weight:bold">path</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>istio-token<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">              </span><span style="color:#204a87;font-weight:bold">expirationSeconds</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#0000cf;font-weight:bold">43200</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">              </span><span style="color:#204a87;font-weight:bold">audience</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>{{<span style="color:#f8f8f8;text-decoration:underline"> </span>.Values.global.sds.token.aud<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span>{{- end<span style="color:#f8f8f8;text-decoration:underline"> </span>}}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>在SDS Server启动时读取</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">trustworthyJWTPath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;./var/run/secrets/tokens/istio-token&#34;</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">K8sSAJwtFileName</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;/var/run/secrets/kubernetes.io/serviceaccount/token&#34;</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">jwtPath</span> <span style="color:#204a87;font-weight:bold">string</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">jwtPolicy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">jwt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JWTPolicyThirdPartyJWT</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;JWT policy is third-party-jwt&#34;</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000">jwtPath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">trustworthyJWTPath</span>
+			<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">jwtPolicy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">jwt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JWTPolicyFirstPartyJWT</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;JWT policy is first-party-jwt&#34;</span><span style="color:#000;font-weight:bold">)</span>
+				<span style="color:#000">jwtPath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">securityModel</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">K8sSAJwtFileName</span>
+			<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using existing certs&#34;</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000;font-weight:bold">}</span>
+
+</code></pre></div><p>最终会从中提取出Namespace和ServiceAccount信息，生成证书签名请求</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">	<span style="color:#8f5902;font-style:italic">// identityTemplate is the format template of identity in the CSR request.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">identityTemplate</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;spiffe://%s/ns/%s/sa/%s&#34;</span>
+</code></pre></div><p>另外，当启用了google plugin时(通过Pilot Agent的PLUGINS环境变量进行配置)还会用这个JWT Token进行token交换操作，默认不开启。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified January 4, 2017
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>

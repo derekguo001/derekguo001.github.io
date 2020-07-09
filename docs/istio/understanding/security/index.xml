@@ -1,0 +1,372 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>郭栋的博客 – 安全机制</title>
+    <link>/docs/istio/understanding/security/</link>
+    <description>Recent content in 安全机制 on 郭栋的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <lastBuildDate>Thu, 05 Jan 2017 00:00:00 +0000</lastBuildDate>
+    
+	  <atom:link href="/docs/istio/understanding/security/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+      
+        
+      
+    
+    
+    <item>
+      <title>Docs: 双向tls认证</title>
+      <link>/docs/istio/understanding/security/mtls/</link>
+      <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
+      
+      <guid>/docs/istio/understanding/security/mtls/</guid>
+      <description>
+        
+        
+        &lt;p&gt;&lt;img src=&#34;../mtls_1.png&#34; alt=&#34;mtls_1&#34;&gt;&lt;/p&gt;
+&lt;p&gt;双向tls的认证，是指两个Envoy Proxy之间的认证。Pod A需要访问Pod B，在Istio中，请求都是由Envoy进行代理的，因此完整的流程是Pod A发出到Pod B的请求，然后请求会被Envoy Proxy A劫持，接着Envoy Proxy A会与Envoy Proxy B进行点对点的认证，认证通过后，请求会由Envoy Proxy A发送给Envoy Proxy B，最后再由Envoy Proxy B将请求转发给Pod B。&lt;/p&gt;
+&lt;p&gt;在Envoy Proxy A与Envoy Proxy B之间认证的过程对于Pod A或者Pod B而言都是无感知的。&lt;/p&gt;
+&lt;p&gt;Istio中双向tls认证的基本对象是&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id=&#34;认证配置的策略类型-&#34;&gt;认证配置的策略类型&lt;/h2&gt;
+&lt;p&gt;在具体进行配置的时候，有四种基本的策略&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;DISABLE&lt;/p&gt;
+&lt;p&gt;即禁用双向tls认证，这种情况下源Envoy与目的Envoy之间没有对对方进行身份的安全确认，它们之间发送的都是明文数据&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;STRICT&lt;/p&gt;
+&lt;p&gt;即严格的双向tls认证模式。源Envoy与目的Envoy之间必须对对方进行身份的安全确认，它们之间发送的都是加密后的数据。&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;PERMISSIVE&lt;/p&gt;
+&lt;p&gt;可以进行双向tls认证、也可以不进行认证从而发送明文数据。&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;UNSET&lt;/p&gt;
+&lt;p&gt;即没有进行设置，这种情况下会继承上级策略，比如当前namespace的或者整个系统的。如果上级策略都为空，则会默认设置为PERMISSIVE&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;认证配置的范围-&#34;&gt;认证配置的范围&lt;/h2&gt;
+&lt;p&gt;Istio中对双向tls认证进行配置的时候，可以有几种不同的范围，范围越小优先级越高：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;全局&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;注意，全局的安全策略名称只能是default，namespace则是istio所在的系统namespace，这里是istio-system&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;namespace级别，即某个namespace中所有服务&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  mtls:
+    mode: PERMISSIVE
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;负载级别，即某个namespace中某些具体的Pod&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: finance
+  mtls:
+    mode: STRICT
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;会将带有&amp;quot;app: finance&amp;quot;label的Pod所在的Envoy实行STRICT模式。&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;端口级别&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: finance
+  mtls:
+    mode: STRICT
+  portLevelMtls:
+    8080:
+      mode: DISABLE
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;会将带有&amp;quot;app: finance&amp;quot;label的Pod所在的Envoy实行STRICT模式，但是会将其中的8080端口使用DISABLE模式。&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;认证配置的具体方法-&#34;&gt;认证配置的具体方法&lt;/h2&gt;
+&lt;p&gt;在Istio中进行双向tls认证配置，需要注意的是客户端和服务器端配置方法是不一样的。例如在namespace foo中有两组服务A和B，每组都有一些Pod，假设服务A的Pod对应的label为&amp;quot;app: A&amp;rdquo;，而服务B的Pod对应的label为&amp;quot;app: B&amp;rdquo;。这时在服务A所在的Pod中访问服务B，要将这一请求设置为STRICT模式，需要配置两处&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;服务器端配置，给服务B对应的负载配置PeerAuthentication策略，这里配置的是服务B所有关联Pod对应的Envoy Proxy。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: B
+  mtls:
+    mode: STRICT
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;客户端配置，给服务B配置DestinationRule策略。这里配置的是所有访问服务B的Pod对应的Envoy Proxy。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;cat &amp;lt;&amp;lt;EOF | kubectl apply -n foo -f -
+apiVersion: &amp;quot;networking.istio.io/v1alpha3&amp;quot;
+kind: &amp;quot;DestinationRule&amp;quot;
+metadata:
+  name: &amp;quot;B&amp;quot;
+spec:
+  host: &amp;quot;B.foo.svc.cluster.local&amp;quot;
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+EOF
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;也就是说客户端配置的时候需要配置目的服务的DestinationRule对象，而服务器端配置的时候需要配置服务器端对应负载的PeerAuthentication对象。&lt;/p&gt;
+&lt;h2 id=&#34;测试case1-默认配置-&#34;&gt;测试case1 默认配置&lt;/h2&gt;
+&lt;pre&gt;&lt;code&gt;kubectl create ns foo
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl create ns bar
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n bar
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n bar
+kubectl create ns legacy
+kubectl apply -f samples/httpbin/httpbin.yaml -n legacy
+kubectl apply -f samples/sleep/sleep.yaml -n legacy
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;创建了3个namespace：foo, bar和legacy，每个namespace分别创建了sleep和httpbin两种应用，作为客户端和服务器端。在foo和bar中的Pod有对应的Envoy Proxy，而在legacy中则没有。下面是创建成功后的Pod情况&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[root@master1 istio-1.6.0]# kubectl get pod --all-namespaces
+NAMESPACE      NAME                                    READY   STATUS    RESTARTS   AGE
+bar            httpbin-67576779c-tjl4m                 2/2     Running   0          31m
+bar            sleep-7dc44b8d45-rfhpl                  2/2     Running   0          31m
+foo            httpbin-67576779c-tw6kl                 2/2     Running   0          31m
+foo            sleep-7dc44b8d45-87x2p                  2/2     Running   0          31m
+legacy         httpbin-779c54bf49-h5wrw                1/1     Running   0          31m
+legacy         sleep-f8cbf5b76-b8xgd                   1/1     Running   0          31m
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;在使用默认的default配置部署Istio的情况下，如果没有设置任何安全策略，默认是PERMISSIVE，即同时允许双向tls认证和不进行任何认证的纯文本数据交换两种方式。注意这只针对有Envoy Proxy的情况，因为这些策略最终的执行者是Envoy，而对于那些没有Envoy Proxy的Pod，例如legacy中的Pod，则只能使用纯文本方式进行收发数据。下面来验证这一点&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[root@master1 istio-1.6.0]# for from in &amp;quot;foo&amp;quot; &amp;quot;bar&amp;quot; &amp;quot;legacy&amp;quot;; do for to in &amp;quot;foo&amp;quot; &amp;quot;bar&amp;quot; &amp;quot;legacy&amp;quot;; do kubectl exec $(kubectl get pod -l app=sleep -n ${from} -o jsonpath={.items..metadata.name}) -c sleep -n ${from} -- curl &amp;quot;http://httpbin.${to}:8000/ip&amp;quot; -s -o /dev/null -w &amp;quot;sleep.${from} to httpbin.${to}: %{http_code}\n&amp;quot;; done; done
+sleep.foo to httpbin.foo: 200
+sleep.foo to httpbin.bar: 200
+sleep.foo to httpbin.legacy: 200
+sleep.bar to httpbin.foo: 200
+sleep.bar to httpbin.bar: 200
+sleep.bar to httpbin.legacy: 200
+sleep.legacy to httpbin.foo: 200
+sleep.legacy to httpbin.bar: 200
+sleep.legacy to httpbin.legacy: 200
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;可以看到任何两个sleep与httpbin之间都是可以连通的。但是如果进一步观察，发现这些认证方式其实是不同的&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+    &amp;quot;X-Forwarded-Client-Cert&amp;quot;: &amp;quot;By=spiffe://cluster.local/ns/foo/sa/httpbin;Hash=41eb8aa0a91782fc1a09df8da85b586c5eaabbca3117f645cdb9df8d998b55f2;Subject=\&amp;quot;\&amp;quot;;URI=spiffe://cluster.local/ns/foo/sa/sleep&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;从foo中的sleep访问foo中的httpbin，header中带有&amp;quot;X-Forwarded-Client-Cert&amp;quot;表明使用了双向tls认证。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n legacy -o jsonpath={.items..metadata.name}) -c sleep -n legacy -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+[root@master1 istio-1.6.0]#
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;而从legacy中的sleep访问legacy中的httpbin，header中则不会带有&amp;quot;X-Forwarded-Client-Cert&amp;rdquo;，因为客户端和服务器端都没有Envoy Proxy，只能进行没有任何认证的纯文本数据交换的方式。&lt;/p&gt;
+&lt;p&gt;另外，还可以看出sleep.legacy发出去的请求都是纯文本类型，而sleep.httpbin收到的请求也都是纯文本类型。而foo和bar里面的Pod发送请求时则会优先使用双向tls认证方式(即下面四种)，这些可以自行测试验证。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;sleep.foo to httpbin.foo: 200
+sleep.foo to httpbin.bar: 200
+sleep.bar to httpbin.foo: 200
+sleep.bar to httpbin.bar: 200
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;清理命令&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl delete -f samples/httpbin/httpbin.yaml -n legacy
+kubectl delete -f samples/sleep/sleep.yaml -n legacy
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n bar
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n bar
+kubectl delete ns foo
+kubectl delete ns legacy
+kubectl delete ns bar
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id=&#34;测试case2-针对特定服务的配置-&#34;&gt;测试case2 针对特定服务的配置&lt;/h2&gt;
+&lt;p&gt;首先，创建一个全局的安全策略，禁用所有的双向tls认证。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;kubectl apply -f - &amp;lt;&amp;lt;EOF
+apiVersion: &amp;quot;security.istio.io/v1beta1&amp;quot;
+kind: &amp;quot;PeerAuthentication&amp;quot;
+metadata:
+  name: &amp;quot;default&amp;quot;
+  namespace: &amp;quot;istio-system&amp;quot;
+spec:
+  mtls:
+    mode: DISABLE
+EOF
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;然后创建一个foo namespace，并在其中创建带有Envoy Proxy的sleep和httpbin&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;kubectl create ns foo
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;这时进行测试，会发现他们之间可以正常访问，但没有使用双向tls认证，这符合预期，说明全局策略生效。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;
+[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &amp;quot;http://httpbin.foo:8000/ip&amp;quot; -s -o /dev/null -w &amp;quot;sleep.foo to httpbin.foo: %{http_code}\n&amp;quot;
+sleep.foo to httpbin.foo: 200
+[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+[root@master1 istio-1.6.0]#
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;接下来为服务器端配置PeerAuthentication策略，让其强制执行双向tls认证&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;cat &amp;lt;&amp;lt;EOF | kubectl apply -n foo -f -
+apiVersion: &amp;quot;security.istio.io/v1beta1&amp;quot;
+kind: &amp;quot;PeerAuthentication&amp;quot;
+metadata:
+  name: &amp;quot;httpbin&amp;quot;
+  namespace: &amp;quot;foo&amp;quot;
+spec:
+  selector:
+    matchLabels:
+      app: httpbin
+  mtls:
+    mode: STRICT
+EOF
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;这时再次进行测试&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &amp;quot;http://httpbin.foo:8000/ip&amp;quot; -s -o /dev/null -w &amp;quot;sleep.foo to httpbin.foo: %{http_code}\n&amp;quot;
+sleep.foo to httpbin.foo: 503
+[root@master1 istio-1.6.0]#
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;出现了503错误，这其实是一个tls冲突，因为截至目前为止我们为服务器端设置了强制使用双向tls认证，但是客户端还未设置。&lt;/p&gt;
+&lt;p&gt;接下来设置客户端。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;cat &amp;lt;&amp;lt;EOF | kubectl apply -n foo -f -
+apiVersion: &amp;quot;networking.istio.io/v1alpha3&amp;quot;
+kind: &amp;quot;DestinationRule&amp;quot;
+metadata:
+  name: &amp;quot;httpbin&amp;quot;
+spec:
+  host: &amp;quot;httpbin.foo.svc.cluster.local&amp;quot;
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+EOF
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;然后进行测试，发现现在已经可以正常访问，且使用了双向tls认证，符合预期。&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &amp;quot;http://httpbin.foo:8000/ip&amp;quot; -s -o /dev/null -w &amp;quot;sleep.foo to httpbin.foo: %{http_code}\n&amp;quot;
+sleep.foo to httpbin.foo: 200
+[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+    &amp;quot;X-Forwarded-Client-Cert&amp;quot;: &amp;quot;By=spiffe://cluster.local/ns/foo/sa/httpbin;Hash=b8a73b2655b270e23eda820e49c56cc9b16521d98cb6c1896eff41c58cc32d56;Subject=\&amp;quot;\&amp;quot;;URI=spiffe://cluster.local/ns/foo/sa/sleep&amp;quot;
+[root@master1 istio-1.6.0]#
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;清理命令&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;kubectl delete PeerAuthentication httpbin -n foo
+kubectl delete DestinationRule httpbin -n foo
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl delete ns foo
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id=&#34;参考-&#34;&gt;参考&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&#34;https://istio.io/docs/concepts/security/&#34;&gt;https://istio.io/docs/concepts/security/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;https://istio.io/docs/tasks/security/authentication/&#34;&gt;https://istio.io/docs/tasks/security/authentication/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;https://istio.io/docs/reference/config/security/peer_authentication/&#34;&gt;https://istio.io/docs/reference/config/security/peer_authentication/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;https://istio.io/docs/reference/config/networking/destination-rule&#34;&gt;https://istio.io/docs/reference/config/networking/destination-rule&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;https://zhaohuabing.com/post/2020-05-25-istio-certificate/&#34;&gt;https://zhaohuabing.com/post/2020-05-25-istio-certificate/&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: 对终端用户的认证</title>
+      <link>/docs/istio/understanding/security/enduser_authentication/</link>
+      <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
+      
+      <guid>/docs/istio/understanding/security/enduser_authentication/</guid>
+      <description>
+        
+        
+        &lt;p&gt;&lt;img src=&#34;../enduser_authentication_1.png&#34; alt=&#34;enduser_authentication_1&#34;&gt;&lt;/p&gt;
+&lt;p&gt;对终端用户的认证是指对于发出请求的用户进行认证，当Pod A需要访问Pod B时，在Pod A内部发出到Pod B的请求，这个请求本身携带了某种Token(例如JWT)，然后请求会被Envoy Proxy A劫持，接着请求会由Envoy Proxy A发送给Envoy Proxy B，这时Envoy Proxy B会根据配置对请求中的Token进行验证，如果验证通过，则Envoy Proxy B会将请求转发给Pod B；如果Token认证失败，则请求被拒绝，不会发送给Pod B。&lt;/p&gt;
+&lt;p&gt;Istio中双向tls认证的基本对象是&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;apiVersion: &amp;quot;security.istio.io/v1beta1&amp;quot;
+kind: &amp;quot;RequestAuthentication&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id=&#34;测试case1-对ingress进行配置-&#34;&gt;测试case1 对ingress进行配置&lt;/h2&gt;
+&lt;p&gt;TODO&lt;/p&gt;
+&lt;h2 id=&#34;测试case1-对sidecar进行配置-&#34;&gt;测试case1 对sidecar进行配置&lt;/h2&gt;
+&lt;p&gt;TODO&lt;/p&gt;
+
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: 授权</title>
+      <link>/docs/istio/understanding/security/authorization/</link>
+      <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
+      
+      <guid>/docs/istio/understanding/security/authorization/</guid>
+      <description>
+        
+        
+        &lt;p&gt;TODO&lt;/p&gt;
+
+      </description>
+    </item>
+    
+    <item>
+      <title>Docs: </title>
+      <link>/docs/istio/understanding/security/_enduser_authentication/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/docs/istio/understanding/security/_enduser_authentication/</guid>
+      <description>
+        
+        
+        &lt;h2 id=&#34;测试case1-对sidecar进行配置-&#34;&gt;测试case1 对sidecar进行配置&lt;/h2&gt;
+&lt;pre&gt;&lt;code&gt;kubectl create ns foo
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl apply -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl delete -f &amp;lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl delete ns foo
+
+
+kubectl apply -f - &amp;lt;&amp;lt;EOF
+apiVersion: &amp;quot;security.istio.io/v1beta1&amp;quot;
+kind: &amp;quot;RequestAuthentication&amp;quot;
+metadata:
+  name: &amp;quot;jwt-example&amp;quot;
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      app: httpbin
+  jwtRules:
+  - issuer: &amp;quot;testing@secure.istio.io&amp;quot;
+    jwksUri: &amp;quot;https://raw.githubusercontent.com/istio/istio/release-1.6/security/tools/jwt/samples/jwks.json&amp;quot;
+EOF
+
+kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &amp;quot;http://httpbin.foo:8000/headers&amp;quot; -s -o /dev/null -w &amp;quot;%{http_code}\n&amp;quot;
+
+kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl --header &amp;quot;Authorization: Bearer xxxxxx&amp;quot; &amp;quot;http://httpbin.foo:8000/headers&amp;quot; -s -o /dev/null -w &amp;quot;%{http_code}\n&amp;quot;
+
+TOKEN=$(curl https://raw.githubusercontent.com/istio/istio/release-1.6/security/tools/jwt/samples/demo.jwt -s)
+
+kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl --header &amp;quot;Authorization: Bearer $TOKEN&amp;quot; &amp;quot;http://httpbin.foo:8000/headers&amp;quot; -s -o /dev/null -w &amp;quot;%{http_code}\n&amp;quot;
+
+kubectl apply -f - &amp;lt;&amp;lt;EOF
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: httpbin
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: httpbin
+  rules:
+  - from:
+    - source:
+        requestPrincipals: [&amp;quot;*&amp;quot;]
+EOF
+&lt;/code&gt;&lt;/pre&gt;
+      </description>
+    </item>
+    
+  </channel>
+</rss>

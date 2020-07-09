@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第二章 Envoy启动过程分析 | 郭栋的博客</title><meta property="og:title" content="第二章 Envoy启动过程分析" />
+<meta property="og:description" content="TODO
+envoyProxy := envoy.NewProxy(envoy.ProxyConfig{ Config: proxyConfig, Node: role.ServiceNode(), LogLevel: proxyLogLevel, ComponentLogLevel: proxyComponentLogLevel, PilotSubjectAltName: pilotSAN, MixerSubjectAltName: mixerSAN, NodeIPs: role.IPAddresses, PodName: podName, PodNamespace: podNamespace, PodIP: podIP, STSPort: stsPort, ControlPlaneAuth: proxyConfig.ControlPlaneAuthPolicy == meshconfig.AuthenticationPolicy_MUTUAL_TLS, DisableReportCalls: disableInternalTelemetry, OutlierLogPath: outlierLogPath, PilotCertProvider: pilotCertProvider, ProvCert: citadel.ProvCert, }) // NewProxy creates an instance of the proxy control commands func NewProxy(cfg ProxyConfig) Proxy { // inject tracing flag for higher levels 	var args []string if cfg.LogLevel != &#34;&#34; { args = append(args, &#34;-l&#34;, cfg." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/agent/proxy/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
+<meta itemprop="name" content="第二章 Envoy启动过程分析">
+<meta itemprop="description" content="TODO
+envoyProxy := envoy.NewProxy(envoy.ProxyConfig{ Config: proxyConfig, Node: role.ServiceNode(), LogLevel: proxyLogLevel, ComponentLogLevel: proxyComponentLogLevel, PilotSubjectAltName: pilotSAN, MixerSubjectAltName: mixerSAN, NodeIPs: role.IPAddresses, PodName: podName, PodNamespace: podNamespace, PodIP: podIP, STSPort: stsPort, ControlPlaneAuth: proxyConfig.ControlPlaneAuthPolicy == meshconfig.AuthenticationPolicy_MUTUAL_TLS, DisableReportCalls: disableInternalTelemetry, OutlierLogPath: outlierLogPath, PilotCertProvider: pilotCertProvider, ProvCert: citadel.ProvCert, }) // NewProxy creates an instance of the proxy control commands func NewProxy(cfg ProxyConfig) Proxy { // inject tracing flag for higher levels 	var args []string if cfg.LogLevel != &#34;&#34; { args = append(args, &#34;-l&#34;, cfg.">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="377">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第二章 Envoy启动过程分析"/>
+<meta name="twitter:description" content="TODO
+envoyProxy := envoy.NewProxy(envoy.ProxyConfig{ Config: proxyConfig, Node: role.ServiceNode(), LogLevel: proxyLogLevel, ComponentLogLevel: proxyComponentLogLevel, PilotSubjectAltName: pilotSAN, MixerSubjectAltName: mixerSAN, NodeIPs: role.IPAddresses, PodName: podName, PodNamespace: podNamespace, PodIP: podIP, STSPort: stsPort, ControlPlaneAuth: proxyConfig.ControlPlaneAuthPolicy == meshconfig.AuthenticationPolicy_MUTUAL_TLS, DisableReportCalls: disableInternalTelemetry, OutlierLogPath: outlierLogPath, PilotCertProvider: pilotCertProvider, ProvCert: citadel.ProvCert, }) // NewProxy creates an instance of the proxy control commands func NewProxy(cfg ProxyConfig) Proxy { // inject tracing flag for higher levels 	var args []string if cfg.LogLevel != &#34;&#34; { args = append(args, &#34;-l&#34;, cfg."/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/agent/">Pilot Agent</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第二章 Envoy启动过程分析</h1>
+    
+	       
+	<p>TODO</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">			<span style="color:#000">envoyProxy</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewProxy</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProxyConfig</span><span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">Config</span><span style="color:#000;font-weight:bold">:</span>              <span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">Node</span><span style="color:#000;font-weight:bold">:</span>                <span style="color:#000">role</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceNode</span><span style="color:#000;font-weight:bold">(),</span>
+				<span style="color:#000">LogLevel</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">proxyLogLevel</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">ComponentLogLevel</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">proxyComponentLogLevel</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">PilotSubjectAltName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">pilotSAN</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">MixerSubjectAltName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">mixerSAN</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">NodeIPs</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">role</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IPAddresses</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">PodName</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">podName</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">PodNamespace</span><span style="color:#000;font-weight:bold">:</span>        <span style="color:#000">podNamespace</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">PodIP</span><span style="color:#000;font-weight:bold">:</span>               <span style="color:#000">podIP</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">STSPort</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">stsPort</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">ControlPlaneAuth</span><span style="color:#000;font-weight:bold">:</span>    <span style="color:#000">proxyConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControlPlaneAuthPolicy</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">meshconfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AuthenticationPolicy_MUTUAL_TLS</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">DisableReportCalls</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">disableInternalTelemetry</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">OutlierLogPath</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">outlierLogPath</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">pilotCertProvider</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">ProvCert</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">citadel</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProvCert</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000;font-weight:bold">})</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// NewProxy creates an instance of the proxy control commands
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewProxy</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">cfg</span> <span style="color:#000">ProxyConfig</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Proxy</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#8f5902;font-style:italic">// inject tracing flag for higher levels
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">args</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">LogLevel</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">args</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;-l&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">LogLevel</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ComponentLogLevel</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">args</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;--component-log-level&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ComponentLogLevel</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ProxyConfig</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">cfg</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">extraArgs</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">args</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">e</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">envoy</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">config</span> <span style="color:#204a87;font-weight:bold">interface</span><span style="color:#000;font-weight:bold">{},</span> <span style="color:#000">epoch</span> <span style="color:#204a87;font-weight:bold">int</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">abort</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">fname</span> <span style="color:#204a87;font-weight:bold">string</span>
+	<span style="color:#8f5902;font-style:italic">// Note: the cert checking still works, the generated file is updated if certs are changed.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// We just don&#39;t save the generated file, but use a custom one instead. Pilot will keep
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// monitoring the certs and restart if the content of the certs changes.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CustomConfigFile</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#8f5902;font-style:italic">// there is a custom configuration. Don&#39;t write our own config - but keep watching the certs.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">fname</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CustomConfigFile</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">out</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">bootstrap</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">New</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">bootstrap</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">Node</span><span style="color:#000;font-weight:bold">:</span>                <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">Proxy</span><span style="color:#000;font-weight:bold">:</span>               <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">PilotSubjectAltName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotSubjectAltName</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">MixerSubjectAltName</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">MixerSubjectAltName</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">LocalEnv</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environ</span><span style="color:#000;font-weight:bold">(),</span>
+			<span style="color:#000">NodeIPs</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NodeIPs</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">PodName</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PodName</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">PodNamespace</span><span style="color:#000;font-weight:bold">:</span>        <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PodNamespace</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">PodIP</span><span style="color:#000;font-weight:bold">:</span>               <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PodIP</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">STSPort</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">STSPort</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">ControlPlaneAuth</span><span style="color:#000;font-weight:bold">:</span>    <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControlPlaneAuth</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">DisableReportCalls</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DisableReportCalls</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">OutlierLogPath</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">OutlierLogPath</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">ProvCert</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProvCert</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000;font-weight:bold">}).</span><span style="color:#000">CreateFileForEpoch</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errora</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to generate bootstrap config: &#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Exit</span><span style="color:#000;font-weight:bold">(</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#8f5902;font-style:italic">// Prevent infinite loop attempting to write the file, let k8s/systemd report
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000">fname</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">out</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#8f5902;font-style:italic">// spin up a new Envoy process
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">fname</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">istioBootstrapOverrideVar</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Envoy command: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#8f5902;font-style:italic">/* #nosec */</span>
+	<span style="color:#000">cmd</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">exec</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">e</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">BinaryPath</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#ce5c00;font-weight:bold">...</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Stdout</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Stdout</span>
+	<span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Stderr</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Stderr</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Start</span><span style="color:#000;font-weight:bold">();</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">done</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">done</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span> <span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Wait</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000;font-weight:bold">}()</span>
+
+	<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">abort</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warnf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Aborting epoch %d&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">errKill</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Process</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Kill</span><span style="color:#000;font-weight:bold">();</span> <span style="color:#000">errKill</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warnf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;killing epoch %d caused an error %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">epoch</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">errKill</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">done</span><span style="color:#000;font-weight:bold">:</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>envoy启动参数</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#0000cf;font-weight:bold">2020</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">05</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">25</span><span style="color:#000">T07</span><span style="color:#000;font-weight:bold">:</span><span style="color:#0000cf;font-weight:bold">44</span><span style="color:#000;font-weight:bold">:</span><span style="color:#0000cf;font-weight:bold">13.334932</span><span style="color:#000">Z</span>	<span style="color:#000">info</span>	<span style="color:#000">Envoy</span> <span style="color:#000">command</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000;font-weight:bold">[</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">c</span> <span style="color:#000">etc</span><span style="color:#ce5c00;font-weight:bold">/</span><span style="color:#000">istio</span><span style="color:#ce5c00;font-weight:bold">/</span><span style="color:#000">proxy</span><span style="color:#ce5c00;font-weight:bold">/</span><span style="color:#000">envoy</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">rev0</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">json</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">restart</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">epoch</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">drain</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">time</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">s</span> <span style="color:#0000cf;font-weight:bold">45</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">parent</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">shutdown</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">time</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">s</span> <span style="color:#0000cf;font-weight:bold">60</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">service</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">cluster</span> <span style="color:#000">productpage</span><span style="color:#000;font-weight:bold">.</span><span style="color:#204a87;font-weight:bold">default</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">service</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">node</span> <span style="color:#000">sidecar</span><span style="color:#a40000">~</span><span style="color:#0000cf;font-weight:bold">10.244.0.16</span><span style="color:#a40000">~</span><span style="color:#000">productpage</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">v1</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">85</span><span style="color:#000">b9bf9cd7</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">kpr5h</span><span style="color:#000;font-weight:bold">.</span><span style="color:#204a87;font-weight:bold">default</span><span style="color:#a40000">~</span><span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">svc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">cluster</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">local</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">max</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">obj</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">name</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">len</span> <span style="color:#0000cf;font-weight:bold">189</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">local</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">address</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">ip</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">version</span> <span style="color:#000">v4</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">log</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">format</span> <span style="color:#ce5c00;font-weight:bold">%</span><span style="color:#000">Y</span><span style="color:#ce5c00;font-weight:bold">-%</span><span style="color:#000">m</span><span style="color:#ce5c00;font-weight:bold">-%</span><span style="color:#000">dT</span><span style="color:#ce5c00;font-weight:bold">%</span><span style="color:#000">T</span><span style="color:#000;font-weight:bold">.</span><span style="color:#ce5c00;font-weight:bold">%</span><span style="color:#000">fZ</span>	<span style="color:#ce5c00;font-weight:bold">%</span><span style="color:#000">l</span>	<span style="color:#000">envoy</span> <span style="color:#ce5c00;font-weight:bold">%</span><span style="color:#000">n</span>	<span style="color:#ce5c00;font-weight:bold">%</span><span style="color:#000">v</span> <span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">l</span> <span style="color:#000">warning</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">component</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">log</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#000">level</span> <span style="color:#000">misc</span><span style="color:#000;font-weight:bold">:</span><span style="color:#204a87;font-weight:bold">error</span> <span style="color:#ce5c00;font-weight:bold">--</span><span style="color:#000">concurrency</span> <span style="color:#0000cf;font-weight:bold">2</span><span style="color:#000;font-weight:bold">]</span>
+</code></pre></div><p>所使用的的image             <code>docker.io/istio/proxyv2:1.6.0</code></p>
+<p>对应的Dockerfile           <code>pilot/docker/Dockerfile.proxyv2</code></p>
+<p>envoy配置文件所对应的模板文件   &lsquo;tools/packaging/common/envoy_bootstrap_v2.json&rsquo;</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified January 4, 2017
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>
