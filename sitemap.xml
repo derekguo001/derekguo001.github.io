@@ -63,12 +63,12 @@
   </url>
   
   <url>
-    <loc>/docs/istio/code/certificate/caserver/</loc>
+    <loc>/docs/istio/code/agent/proxy/</loc>
     <lastmod>2017-01-04T00:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>/docs/istio/code/agent/proxy/</loc>
+    <loc>/docs/istio/code/certificate/istiod_cert/</loc>
     <lastmod>2017-01-04T00:00:00+00:00</lastmod>
   </url>
   
@@ -83,12 +83,12 @@
   </url>
   
   <url>
-    <loc>/docs/istio/code/discovery/configcontroller/</loc>
+    <loc>/docs/istio/code/certificate/caserver/</loc>
     <lastmod>2017-01-04T00:00:00+00:00</lastmod>
   </url>
   
   <url>
-    <loc>/docs/istio/code/certificate/sdsserver/</loc>
+    <loc>/docs/istio/code/discovery/configcontroller/</loc>
     <lastmod>2017-01-04T00:00:00+00:00</lastmod>
   </url>
   
@@ -99,6 +99,11 @@
   
   <url>
     <loc>/docs/istio/code/discovery/discoveryserver/</loc>
+    <lastmod>2017-01-04T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>/docs/istio/code/certificate/sdsserver/</loc>
     <lastmod>2017-01-04T00:00:00+00:00</lastmod>
   </url>
   

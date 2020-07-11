@@ -20,7 +20,7 @@
 <link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
 <link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
 
-<title>第三章 SDS Server | 郭栋的博客</title><meta property="og:title" content="第三章 SDS Server" />
+<title>第四章 SDS Server | 郭栋的博客</title><meta property="og:title" content="第四章 SDS Server" />
 <meta property="og:description" content="一、模型定义   说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。
 Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的Start()，其它SDS相关对象的创建和启动都是在SDSAgent.Start()内部完成的。
 SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为SecretDiscoveryServiceServer，SDS Server实现其中的StreamSecrets()和FetchSecrets()，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为nodeagent.sds.sdsservice，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为workloadSds和gatewaySds，它们都作为了nodeagent.sds.Server的成员变量，而nodeagent.sds.Server就是真正的SDS Server。
@@ -33,7 +33,7 @@ type SecretCache struct { fetcher *secretfetcher." />
 <meta property="og:url" content="/docs/istio/code/certificate/sdsserver/" />
 <meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
 <meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
-<meta itemprop="name" content="第三章 SDS Server">
+<meta itemprop="name" content="第四章 SDS Server">
 <meta itemprop="description" content="一、模型定义   说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。
 Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的Start()，其它SDS相关对象的创建和启动都是在SDSAgent.Start()内部完成的。
 SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为SecretDiscoveryServiceServer，SDS Server实现其中的StreamSecrets()和FetchSecrets()，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为nodeagent.sds.sdsservice，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为workloadSds和gatewaySds，它们都作为了nodeagent.sds.Server的成员变量，而nodeagent.sds.Server就是真正的SDS Server。
@@ -49,7 +49,7 @@ type SecretCache struct { fetcher *secretfetcher.">
 
 
 <meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="第三章 SDS Server"/>
+<meta name="twitter:title" content="第四章 SDS Server"/>
 <meta name="twitter:description" content="一、模型定义   说明：上图中很多对象都是在nodeagent里定义，原因是在之前的版本中，nodeagent独立于Pilot Agent存在，现在nodeagent已经被合并到了Pilot Agent内部，但核心代码的实现仍然在nodeagent目录中。
 Pilot Agent启动时，会创建一个SDSAgent的对象，然后执行它的Start()，其它SDS相关对象的创建和启动都是在SDSAgent.Start()内部完成的。
 SDS Server与Envoy通过SDS API进行交互时的需要实现的接口为SecretDiscoveryServiceServer，SDS Server实现其中的StreamSecrets()和FetchSecrets()，这两个函数接受请求，然后进行处理，最后将证书发送给Envoy。在Pilot Agent中实现这个接口的数据结构为nodeagent.sds.sdsservice，由于Envoy在Istio中可以扮演两个角色：第一个是作为普通pod的sidecar，第二个作为ingress gateway或者egress gateway，这两种情况下处理流程是不同的，因此在实现SDS Server的时候分别进行了实现，对应的名称为workloadSds和gatewaySds，它们都作为了nodeagent.sds.Server的成员变量，而nodeagent.sds.Server就是真正的SDS Server。
@@ -393,13 +393,19 @@ type SecretCache struct { fetcher *secretfetcher."/>
       
       
       
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
       
       
       
       
       
-      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
       
       
     </li>
@@ -518,7 +524,7 @@ type SecretCache struct { fetcher *secretfetcher."/>
 
 
 <li class="breadcrumb-item active" aria-current="page">
-	<a href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+	<a href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
 </li>
 
 	</ol>
@@ -526,7 +532,7 @@ type SecretCache struct { fetcher *secretfetcher."/>
 
             
 <div class="td-content">
-	<h1>第三章 SDS Server</h1>
+	<h1>第四章 SDS Server</h1>
     
 	       
 	<h2 id="一模型定义-">一、模型定义</h2>

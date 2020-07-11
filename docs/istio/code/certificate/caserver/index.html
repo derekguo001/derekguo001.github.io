@@ -20,7 +20,7 @@
 <link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
 <link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
 
-<title>第二章 CA Server | 郭栋的博客</title><meta property="og:title" content="第二章 CA Server" />
+<title>第三章 CA Server | 郭栋的博客</title><meta property="og:title" content="第三章 CA Server" />
 <meta property="og:description" content="一、对象模型 在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。
 SDS Server和CA Server之间进行通信时的接口名为IstioCertificateServiceServer，它只包含了一个函数CreateCertificate()，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为pkg.server.ca.Server的对象会实现IstioCertificateServiceServer这个Interface中的CreateCertificate()函数以便对请求进行应答。
 除了实现IstioCertificateServiceServer这个Interface之外，pkg.server.ca.Server还实现了另外一个Interface，名为IstioCAServiceServer，其中的函数名为HandleCSR()，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。
@@ -34,7 +34,7 @@ authenticator是一个Interface类型，代码中包含了四种实现
 <meta property="og:url" content="/docs/istio/code/certificate/caserver/" />
 <meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
 <meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
-<meta itemprop="name" content="第二章 CA Server">
+<meta itemprop="name" content="第三章 CA Server">
 <meta itemprop="description" content="一、对象模型 在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。
 SDS Server和CA Server之间进行通信时的接口名为IstioCertificateServiceServer，它只包含了一个函数CreateCertificate()，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为pkg.server.ca.Server的对象会实现IstioCertificateServiceServer这个Interface中的CreateCertificate()函数以便对请求进行应答。
 除了实现IstioCertificateServiceServer这个Interface之外，pkg.server.ca.Server还实现了另外一个Interface，名为IstioCAServiceServer，其中的函数名为HandleCSR()，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。
@@ -51,7 +51,7 @@ authenticator是一个Interface类型，代码中包含了四种实现
 
 
 <meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="第二章 CA Server"/>
+<meta name="twitter:title" content="第三章 CA Server"/>
 <meta name="twitter:description" content="一、对象模型 在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。
 SDS Server和CA Server之间进行通信时的接口名为IstioCertificateServiceServer，它只包含了一个函数CreateCertificate()，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为pkg.server.ca.Server的对象会实现IstioCertificateServiceServer这个Interface中的CreateCertificate()函数以便对请求进行应答。
 除了实现IstioCertificateServiceServer这个Interface之外，pkg.server.ca.Server还实现了另外一个Interface，名为IstioCAServiceServer，其中的函数名为HandleCSR()，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。
@@ -396,13 +396,19 @@ authenticator是一个Interface类型，代码中包含了四种实现
       
       
       
-      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
       
       
       
       
       
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第三章 SDS Server</a>
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
       
       
     </li>
@@ -502,7 +508,7 @@ authenticator是一个Interface类型，代码中包含了四种实现
 
 
 <li class="breadcrumb-item active" aria-current="page">
-	<a href="/docs/istio/code/certificate/caserver/">第二章 CA Server</a>
+	<a href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
 </li>
 
 	</ol>
@@ -510,7 +516,7 @@ authenticator是一个Interface类型，代码中包含了四种实现
 
             
 <div class="td-content">
-	<h1>第二章 CA Server</h1>
+	<h1>第三章 CA Server</h1>
     
 	       
 	<figure><a href="../caserver_data_1.png" target="_blank">
