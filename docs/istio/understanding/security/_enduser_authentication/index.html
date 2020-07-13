@@ -24,10 +24,10 @@
 <meta property="og:description" content="测试case1 对sidecar进行配置 kubectl create ns foo kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete ns foo kubectl apply -f - &lt;&lt;EOF apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; metadata: name: &quot;jwt-example&quot; namespace: istio-system spec: selector: matchLabels: app: httpbin jwtRules: - issuer: &quot;testing@secure.istio.io&quot; jwksUri: &quot;https://raw." />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/understanding/security/_enduser_authentication/" />
-
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
 <meta itemprop="name" content="">
 <meta itemprop="description" content="测试case1 对sidecar进行配置 kubectl create ns foo kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete ns foo kubectl apply -f - &lt;&lt;EOF apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; metadata: name: &quot;jwt-example&quot; namespace: istio-system spec: selector: matchLabels: app: httpbin jwtRules: - issuer: &quot;testing@secure.istio.io&quot; jwksUri: &quot;https://raw.">
-
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
 <meta itemprop="wordCount" content="179">
 
 
@@ -544,7 +544,7 @@ EOF
 </code></pre>
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified January 1, 0001
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
 </div>
 </div>
 

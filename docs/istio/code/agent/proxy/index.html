@@ -26,12 +26,12 @@ envoyProxy := envoy.NewProxy(envoy.ProxyConfig{ Config: proxyConfig, Node: role.
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/code/agent/proxy/" />
 <meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
-<meta property="article:modified_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
 <meta itemprop="name" content="第二章 Envoy启动过程分析">
 <meta itemprop="description" content="TODO
 envoyProxy := envoy.NewProxy(envoy.ProxyConfig{ Config: proxyConfig, Node: role.ServiceNode(), LogLevel: proxyLogLevel, ComponentLogLevel: proxyComponentLogLevel, PilotSubjectAltName: pilotSAN, MixerSubjectAltName: mixerSAN, NodeIPs: role.IPAddresses, PodName: podName, PodNamespace: podNamespace, PodIP: podIP, STSPort: stsPort, ControlPlaneAuth: proxyConfig.ControlPlaneAuthPolicy == meshconfig.AuthenticationPolicy_MUTUAL_TLS, DisableReportCalls: disableInternalTelemetry, OutlierLogPath: outlierLogPath, PilotCertProvider: pilotCertProvider, ProvCert: citadel.ProvCert, }) // NewProxy creates an instance of the proxy control commands func NewProxy(cfg ProxyConfig) Proxy { // inject tracing flag for higher levels 	var args []string if cfg.LogLevel != &#34;&#34; { args = append(args, &#34;-l&#34;, cfg.">
 <meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
-<meta itemprop="dateModified" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
 <meta itemprop="wordCount" content="377">
 
 
@@ -601,7 +601,7 @@ envoyProxy := envoy.NewProxy(envoy.ProxyConfig{ Config: proxyConfig, Node: role.
 
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified January 4, 2017
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
 </div>
 </div>
 
