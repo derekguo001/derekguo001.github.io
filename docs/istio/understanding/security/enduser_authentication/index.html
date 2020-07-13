@@ -22,20 +22,20 @@
 
 <title>对终端用户的认证 | 郭栋的博客</title><meta property="og:title" content="对终端用户的认证" />
 <meta property="og:description" content="对终端用户的认证是指对于发出请求的用户进行认证，当Pod A需要访问Pod B时，在Pod A内部发出到Pod B的请求，这个请求本身携带了某种Token(例如JWT)，然后请求会被Envoy Proxy A劫持，接着请求会由Envoy Proxy A发送给Envoy Proxy B，这时Envoy Proxy B会根据配置对请求中的Token进行验证，如果验证通过，则Envoy Proxy B会将请求转发给Pod B；如果Token认证失败，则请求被拒绝，不会发送给Pod B。
-Istio中双向tls认证的基本对象是
+Istio中终端用户认证的基本对象是
 apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; 测试case1 对ingress进行配置 TODO
 测试case1 对sidecar进行配置 TODO" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/understanding/security/enduser_authentication/" />
 <meta property="article:published_time" content="2017-01-05T00:00:00+00:00" />
-<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta property="article:modified_time" content="2020-07-13T13:52:45+08:00" />
 <meta itemprop="name" content="对终端用户的认证">
 <meta itemprop="description" content="对终端用户的认证是指对于发出请求的用户进行认证，当Pod A需要访问Pod B时，在Pod A内部发出到Pod B的请求，这个请求本身携带了某种Token(例如JWT)，然后请求会被Envoy Proxy A劫持，接着请求会由Envoy Proxy A发送给Envoy Proxy B，这时Envoy Proxy B会根据配置对请求中的Token进行验证，如果验证通过，则Envoy Proxy B会将请求转发给Pod B；如果Token认证失败，则请求被拒绝，不会发送给Pod B。
-Istio中双向tls认证的基本对象是
+Istio中终端用户认证的基本对象是
 apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; 测试case1 对ingress进行配置 TODO
 测试case1 对sidecar进行配置 TODO">
 <meta itemprop="datePublished" content="2017-01-05T00:00:00&#43;00:00" />
-<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:52:45&#43;08:00" />
 <meta itemprop="wordCount" content="28">
 
 
@@ -43,7 +43,7 @@ apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthenticat
 <meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="对终端用户的认证"/>
 <meta name="twitter:description" content="对终端用户的认证是指对于发出请求的用户进行认证，当Pod A需要访问Pod B时，在Pod A内部发出到Pod B的请求，这个请求本身携带了某种Token(例如JWT)，然后请求会被Envoy Proxy A劫持，接着请求会由Envoy Proxy A发送给Envoy Proxy B，这时Envoy Proxy B会根据配置对请求中的Token进行验证，如果验证通过，则Envoy Proxy B会将请求转发给Pod B；如果Token认证失败，则请求被拒绝，不会发送给Pod B。
-Istio中双向tls认证的基本对象是
+Istio中终端用户认证的基本对象是
 apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; 测试case1 对ingress进行配置 TODO
 测试case1 对sidecar进行配置 TODO"/>
 
@@ -513,7 +513,7 @@ apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthenticat
 	       
 	<p><img src="../enduser_authentication_1.png" alt="enduser_authentication_1"></p>
 <p>对终端用户的认证是指对于发出请求的用户进行认证，当Pod A需要访问Pod B时，在Pod A内部发出到Pod B的请求，这个请求本身携带了某种Token(例如JWT)，然后请求会被Envoy Proxy A劫持，接着请求会由Envoy Proxy A发送给Envoy Proxy B，这时Envoy Proxy B会根据配置对请求中的Token进行验证，如果验证通过，则Envoy Proxy B会将请求转发给Pod B；如果Token认证失败，则请求被拒绝，不会发送给Pod B。</p>
-<p>Istio中双向tls认证的基本对象是</p>
+<p>Istio中终端用户认证的基本对象是</p>
 <pre><code>apiVersion: &quot;security.istio.io/v1beta1&quot;
 kind: &quot;RequestAuthentication&quot;
 </code></pre><h2 id="测试case1-对ingress进行配置-">测试case1 对ingress进行配置</h2>
@@ -523,7 +523,7 @@ kind: &quot;RequestAuthentication&quot;
 
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/bb75db4b8e2f45343379b76a5c1b5786a3f572dc">Fix typo in content/en/docs/istio/understanding/security/enduser_authentication.md (bb75db4)</a>
 </div>
 </div>
 
