@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第二章 ServiceController源代码解析 | 郭栋的博客</title><meta property="og:title" content="第二章 ServiceController源代码解析" />
+<meta property="og:description" content="一、对象模型 对象模型的定义 pilot discovery内部维护了一套自己的数据结构，外部的对象被同步到pilot discovery内部后会转换成内部的数据结构，当外部的对象更新后，也会自动更新内部的这些对象。当需要向envoy推送配置的时候，会从内部的这些对象转化成envoy格式的配置。
+其中最基本的有三类：Service、Port和IstioEndpoint，都在model模块中定义。大致上可以认为是kubernetes中的service、pod和endpoint在pilot discovery内部的格式。当读取外部的kube service和endpoint后会进行一些格式转换，转换成内部的这些对象。
+在这三类基本对象的基础上进行了一些聚合，形成了另一个抽象的对象ServiceInstance
+type ServiceInstance struct { Service *Service `json:&#34;service,omitempty&#34;` ServicePort *Port `json:&#34;servicePort,omitempty&#34;` Endpoint *IstioEndpoint `json:&#34;endpoint,omitempty&#34;` } 为了管理这些对象(主要是Service和ServiceInstance)，定义了两个Interface
+  Controller
+type Controller interface { AppendServiceHandler(f func(*Service, Event)) error AppendInstanceHandler(f func(*ServiceInstance, Event)) error Run(stop &lt;-chan struct{}) HasSynced() bool } 可以看出这是一个可以Run()的实体对象
+ 在pilot discovery后续进行初始化的时候，会调用这里的这两个append函数注册一些回调函数 envoy连接后会向Controller注册自己 当Service和ServiceInstance发生变化的时候，Controller会调用之前注册的回调函数向envoy推送更新后的配置    ServiceDiscovery
+type ServiceDiscovery interface { Services() ([]*Service, error) GetService(hostname host.Name) (*Service, error) InstancesByPort(svc *Service, servicePort int, labels labels." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/discovery/servicecontroller/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta itemprop="name" content="第二章 ServiceController源代码解析">
+<meta itemprop="description" content="一、对象模型 对象模型的定义 pilot discovery内部维护了一套自己的数据结构，外部的对象被同步到pilot discovery内部后会转换成内部的数据结构，当外部的对象更新后，也会自动更新内部的这些对象。当需要向envoy推送配置的时候，会从内部的这些对象转化成envoy格式的配置。
+其中最基本的有三类：Service、Port和IstioEndpoint，都在model模块中定义。大致上可以认为是kubernetes中的service、pod和endpoint在pilot discovery内部的格式。当读取外部的kube service和endpoint后会进行一些格式转换，转换成内部的这些对象。
+在这三类基本对象的基础上进行了一些聚合，形成了另一个抽象的对象ServiceInstance
+type ServiceInstance struct { Service *Service `json:&#34;service,omitempty&#34;` ServicePort *Port `json:&#34;servicePort,omitempty&#34;` Endpoint *IstioEndpoint `json:&#34;endpoint,omitempty&#34;` } 为了管理这些对象(主要是Service和ServiceInstance)，定义了两个Interface
+  Controller
+type Controller interface { AppendServiceHandler(f func(*Service, Event)) error AppendInstanceHandler(f func(*ServiceInstance, Event)) error Run(stop &lt;-chan struct{}) HasSynced() bool } 可以看出这是一个可以Run()的实体对象
+ 在pilot discovery后续进行初始化的时候，会调用这里的这两个append函数注册一些回调函数 envoy连接后会向Controller注册自己 当Service和ServiceInstance发生变化的时候，Controller会调用之前注册的回调函数向envoy推送更新后的配置    ServiceDiscovery
+type ServiceDiscovery interface { Services() ([]*Service, error) GetService(hostname host.Name) (*Service, error) InstancesByPort(svc *Service, servicePort int, labels labels.">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="wordCount" content="881">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第二章 ServiceController源代码解析"/>
+<meta name="twitter:description" content="一、对象模型 对象模型的定义 pilot discovery内部维护了一套自己的数据结构，外部的对象被同步到pilot discovery内部后会转换成内部的数据结构，当外部的对象更新后，也会自动更新内部的这些对象。当需要向envoy推送配置的时候，会从内部的这些对象转化成envoy格式的配置。
+其中最基本的有三类：Service、Port和IstioEndpoint，都在model模块中定义。大致上可以认为是kubernetes中的service、pod和endpoint在pilot discovery内部的格式。当读取外部的kube service和endpoint后会进行一些格式转换，转换成内部的这些对象。
+在这三类基本对象的基础上进行了一些聚合，形成了另一个抽象的对象ServiceInstance
+type ServiceInstance struct { Service *Service `json:&#34;service,omitempty&#34;` ServicePort *Port `json:&#34;servicePort,omitempty&#34;` Endpoint *IstioEndpoint `json:&#34;endpoint,omitempty&#34;` } 为了管理这些对象(主要是Service和ServiceInstance)，定义了两个Interface
+  Controller
+type Controller interface { AppendServiceHandler(f func(*Service, Event)) error AppendInstanceHandler(f func(*ServiceInstance, Event)) error Run(stop &lt;-chan struct{}) HasSynced() bool } 可以看出这是一个可以Run()的实体对象
+ 在pilot discovery后续进行初始化的时候，会调用这里的这两个append函数注册一些回调函数 envoy连接后会向Controller注册自己 当Service和ServiceInstance发生变化的时候，Controller会调用之前注册的回调函数向envoy推送更新后的配置    ServiceDiscovery
+type ServiceDiscovery interface { Services() ([]*Service, error) GetService(hostname host.Name) (*Service, error) InstancesByPort(svc *Service, servicePort int, labels labels."/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#一对象模型-">一、对象模型</a>
+      <ul>
+        <li><a href="#对象模型的定义-">对象模型的定义</a></li>
+        <li><a href="#对象模型的实例化-">对象模型的实例化</a></li>
+      </ul>
+    </li>
+    <li><a href="#二启动过程分析-">二、启动过程分析</a>
+      <ul>
+        <li><a href="#模型定义-">模型定义</a></li>
+        <li><a href="#初始化-">初始化</a></li>
+        <li><a href="#注册回调函数-">注册回调函数</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/discovery/">Pilot Discovery</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第二章 ServiceController源代码解析</h1>
+    
+	       
+	<figure><a href="../servicecontroller_data_1.png" target="_blank">
+    <img src="../servicecontroller_data_1.png"/> </a>
+</figure>
+
+<h2 id="一对象模型-">一、对象模型</h2>
+<h3 id="对象模型的定义-">对象模型的定义</h3>
+<p>pilot discovery内部维护了一套自己的数据结构，外部的对象被同步到pilot discovery内部后会转换成内部的数据结构，当外部的对象更新后，也会自动更新内部的这些对象。当需要向envoy推送配置的时候，会从内部的这些对象转化成envoy格式的配置。</p>
+<p>其中最基本的有三类：Service、Port和IstioEndpoint，都在model模块中定义。大致上可以认为是kubernetes中的service、pod和endpoint在pilot discovery内部的格式。当读取外部的kube service和endpoint后会进行一些格式转换，转换成内部的这些对象。</p>
+<p>在这三类基本对象的基础上进行了一些聚合，形成了另一个抽象的对象ServiceInstance</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">ServiceInstance</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">Service</span>     <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Service</span>       <span style="color:#4e9a06">`json:&#34;service,omitempty&#34;`</span>
+	<span style="color:#000">ServicePort</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Port</span>          <span style="color:#4e9a06">`json:&#34;servicePort,omitempty&#34;`</span>
+	<span style="color:#000">Endpoint</span>    <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">IstioEndpoint</span> <span style="color:#4e9a06">`json:&#34;endpoint,omitempty&#34;`</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>为了管理这些对象(主要是Service和ServiceInstance)，定义了两个Interface</p>
+<ol>
+<li>
+<p>Controller</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Controller</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#000">AppendServiceHandler</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">f</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">Event</span><span style="color:#000;font-weight:bold">))</span> <span style="color:#204a87;font-weight:bold">error</span>
+    <span style="color:#000">AppendInstanceHandler</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">f</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ServiceInstance</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">Event</span><span style="color:#000;font-weight:bold">))</span> <span style="color:#204a87;font-weight:bold">error</span>
+    <span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span>
+    <span style="color:#000">HasSynced</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#204a87;font-weight:bold">bool</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出这是一个可以Run()的实体对象</p>
+<ul>
+<li>在pilot discovery后续进行初始化的时候，会调用这里的这两个append函数注册一些回调函数</li>
+<li>envoy连接后会向Controller注册自己</li>
+<li>当Service和ServiceInstance发生变化的时候，Controller会调用之前注册的回调函数向envoy推送更新后的配置</li>
+</ul>
+</li>
+<li>
+<p>ServiceDiscovery</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">ServiceDiscovery</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#000">Services</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#000">GetService</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">hostname</span> <span style="color:#000">host</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Name</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#000">InstancesByPort</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">svc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">servicePort</span> <span style="color:#204a87;font-weight:bold">int</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">labels</span> <span style="color:#000">labels</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Collection</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ServiceInstance</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#000">GetProxyServiceInstances</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Proxy</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ServiceInstance</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#000">GetProxyWorkloadLabels</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Proxy</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">labels</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Collection</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#000">ManagementPorts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">addr</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">PortList</span>
+    <span style="color:#000">WorkloadHealthCheckInfo</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">addr</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">ProbeList</span>
+    <span style="color:#000">GetIstioServiceAccounts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">svc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ports</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">int</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>相对于上面的Controller，这里的ServiceDiscovery没有Run()这些函数，它更像是一个静态的对象，它的作用就是用来获取目前存在的内部对象，包括Service和Instance等。</p>
+<p>这些抽象模型的定义位于<code>pilot/pkg/model</code>中。</p>
+</li>
+</ol>
+<h3 id="对象模型的实例化-">对象模型的实例化</h3>
+<p>在第一部分定义的两个Interface(Controller和ServiceDiscovery)的基础上，pilot discovery需要将这些东西实例化，要落实到某种具体的对象上，比如kubernetes。这些实例化的对象被称为serviceregistry，代码位于<code>pilot/pkg/serviceregistry</code>。</p>
+<p>首先，定义了一个Instance接口，注意它完全不同于上文提到的ServiceInstance，它们是完全不相关的两个东西。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Instance</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Controller</span>
+	<span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceDiscovery</span>
+
+	<span style="color:#8f5902;font-style:italic">// Provider backing this service registry (i.e. Kubernetes, Consul, etc.)
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">Provider</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000">ProviderID</span>
+
+	<span style="color:#8f5902;font-style:italic">// Cluster for which the service registry applies. Only needed for multicluster systems.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">Cluster</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#204a87;font-weight:bold">string</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出，Instance继承了上文中的<code>model.Controller</code>和<code>model.ServiceDiscovery</code>，也就意味着我们可以通过Instance实例可以操纵所有上文中提到的对象，主要是<code>model.Service</code>和<code>model.ServiceInstance</code>。</p>
+<p>接下来看<code>Provider()</code>，它的返回值是一个字符串，实际上就是某一种实现的具体类型。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// ProviderID defines underlying platform supporting service registry
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">ProviderID</span> <span style="color:#204a87;font-weight:bold">string</span>
+
+<span style="color:#204a87;font-weight:bold">const</span> <span style="color:#000;font-weight:bold">(</span>
+	<span style="color:#8f5902;font-style:italic">// Mock is a service registry that contains 2 hard-coded test services
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">Mock</span> <span style="color:#000">ProviderID</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;Mock&#34;</span>
+	<span style="color:#8f5902;font-style:italic">// Kubernetes is a service registry backed by k8s API server
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">Kubernetes</span> <span style="color:#000">ProviderID</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;Kubernetes&#34;</span>
+	<span style="color:#8f5902;font-style:italic">// Consul is a service registry backed by Consul
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">Consul</span> <span style="color:#000">ProviderID</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;Consul&#34;</span>
+	<span style="color:#8f5902;font-style:italic">// MCP is a service registry backed by MCP ServiceEntries
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">MCP</span> <span style="color:#000">ProviderID</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;MCP&#34;</span>
+	<span style="color:#8f5902;font-style:italic">// External is a service registry for externally provided ServiceEntries
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">External</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#4e9a06">&#34;External&#34;</span>
+<span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><p>pilot discovery定义了Instance接口作为某一种具体实现的父类，具体的实现都需要继承Instance并实现其中的接口。具体的实现包括Kubernetes、Consul、MCP、External等。其中的MCP是为了进一步解耦Istio与Kubernetes而开发的一个新的抽象层，暂时可以不需要太关注。目前我们仍然直接与Kubernetes进行对接。另外External是用来对接外部的一些服务而开发的一套实现。</p>
+<p>由于有这么多具体的实现，为了对它们进行统一管理，pilot discovery又定义了另外一个对象serviceregistry.aggregate.Controller。
+代码在<code>pilot/pkg/serviceregistry/aggregate</code>中。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Controller</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">registries</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Instance</span>
+	<span style="color:#000">storeLock</span>  <span style="color:#000">sync</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RWMutex</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>它里面的<code>registries</code>就是具体实现的serviceregistry的数组。</p>
+<p>这个Controller并没有直接继承上文中的Instance接口，因为它不是某一类具体的实现。它实现了Instance接口的两个父接口(Controller和ServiceDiscovery)。实现Controller和ServiceDiscovery这两个父接口的方式，也是分别遍历内部的<code>registries</code>数组，然后针对每一个具体的实现调用对应的函数。</p>
+<p>例如下面是对应于ServiceDiscovery Interface的<code>Services() ([]*Service, error)</code>的实现</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Controller</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Services</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">services</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">r</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetRegistries</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">svcs</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">r</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Services</span><span style="color:#000;font-weight:bold">()</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">services</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">services</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">svcs</span><span style="color:#ce5c00;font-weight:bold">...</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">services</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">errs</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出serviceregistry.aggregate.Controller的实现方式，就是通过<code>GetRegistries()</code>遍历内部的<code>registries</code>数组，然后针对每一个具体的实现调用对应的<code>Services()</code>，然后将结果聚合到一起返回。</p>
+<p>下面通过分析一下相关组件的启动过程来看一些上面的这些对象和操作是如何在Istio pilot discovery中关联起来的。</p>
+<h2 id="二启动过程分析-">二、启动过程分析</h2>
+<h3 id="模型定义-">模型定义</h3>
+<p>Istio pilot discovery有一个总的Server对象</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Server</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">environment</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span>
+	<span style="color:#000">kubeRegistry</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">kubecontroller</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Controller</span>
+	<span style="color:#000">serviceEntryStore</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">serviceentry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceEntryStore</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>和ServiceController相关的有三个成员。其中kubeRegistry和serviceEntryStore实际上就是ServiceController对应于Kubernetes和外部服务的实例化对象。</p>
+<p>另外一个是environment成员</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Environment</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">ServiceDiscovery</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>它里面的ServiceDiscovery成员就是上文中提到的serviceregistry.aggregate.Controller。</p>
+<p>这里可以总结一下，当ServiceController对象实例化之后，产生了很多实例对象，包括kubernetes、mcp、external等等，这些controller聚合到一起形成了serviceregistry.aggregate.Controller对象，这个对象本身作为Environment的ServiceDiscovery成员存储于Environment中，而Environment本身又作为pilot discovery的Server对象中的environment成员。这是ServiceController对象实例与pilot discovery的Server对象的第一个关联点。</p>
+<p>另外，刚才生成提到的ServiceController对象实例化之后，产生了很多实例对象，包括kubernetes、mcp、external，其中的kubernetes和external又直接存储到了pilot discovery的Server对象中，对应的成员名为kubeRegistry和serviceEntryStore。这是ServiceController对象实例与pilot discovery的Server对象的第二个关联点。</p>
+<h3 id="初始化-">初始化</h3>
+<p>main函数位于<code>pilot/cmd/pilot-discovery/main.go</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000;font-weight:bold">(</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">discoveryCmd</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">Use</span><span style="color:#000;font-weight:bold">:</span>   <span style="color:#4e9a06">&#34;discovery&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Short</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#4e9a06">&#34;Start Istio proxy discovery service.&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">Args</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ExactArgs</span><span style="color:#000;font-weight:bold">(</span><span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">),</span>
+		<span style="color:#000">RunE</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">cobra</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Command</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">discoveryServer</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">bootstrap</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serverArgs</span><span style="color:#000;font-weight:bold">)</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">discoveryServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to start discovery service: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000;font-weight:bold">}</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000;font-weight:bold">},</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">)</span>
+
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">init</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">rootCmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AddCommand</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">discoveryCmd</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">main</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">rootCmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Execute</span><span style="color:#000;font-weight:bold">();</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errora</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Exit</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+</code></pre></div><p>初始化代码位于<code>bootstrap.NewServer(serverArgs)</code>中</p>
+<p><code>pilot/pkg/bootstrap/server.go</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">e</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ServiceDiscovery</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">aggregate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewController</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewPushContext</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">DomainSuffix</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControllerOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DomainSuffix</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">environment</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">e</span><span style="color:#000;font-weight:bold">,</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>先创建Environment对象并将其存到Server中，执行时会在Environment内创建一个空的serviceregistry.aggregate.Controller，但还未向里面添加ServiceController实例，代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// NewController creates a new Aggregate controller
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewController</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Controller</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Controller</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">registries</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">([]</span><span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Instance</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>创建了Server对象后，会进行初始化，在<code>initControllers()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">e</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ServiceDiscovery</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">aggregate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewController</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewPushContext</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">DomainSuffix</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControllerOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DomainSuffix</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">environment</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">e</span><span style="color:#000;font-weight:bold">,</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initControllers</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">initControllers</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initServiceControllers</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;error initializing service controllers: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>下面详细分析<code>initServiceControllers()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">initServiceControllers</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">serviceControllers</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceController</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">registered</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">map</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProviderID</span><span style="color:#000;font-weight:bold">]</span><span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">r</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Registries</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">serviceRegistry</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ProviderID</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">r</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">exists</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">registered</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">serviceRegistry</span><span style="color:#000;font-weight:bold">];</span> <span style="color:#000">exists</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warnf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;%s registry specified multiple times.&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">r</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">continue</span>
+		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000">registered</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">serviceRegistry</span><span style="color:#000;font-weight:bold">]</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87;font-weight:bold">true</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Adding %s registry adapter&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">serviceRegistry</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">switch</span> <span style="color:#000">serviceRegistry</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Kubernetes</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initKubeRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serviceControllers</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Consul</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initConsulRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serviceControllers</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Mock</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initMockRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serviceControllers</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;service registry %s is not supported&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">r</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">serviceEntryStore</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">serviceentry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewServiceDiscovery</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">configController</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">environment</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IstioConfigStore</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnvoyXdsServer</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">serviceControllers</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AddRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">serviceEntryStore</span><span style="color:#000;font-weight:bold">)</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#8f5902;font-style:italic">// Defer running of the service controllers.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addStartFunc</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">serviceControllers</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+	<span style="color:#000;font-weight:bold">})</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这个函数首先用<code>serviceControllers := s.ServiceController()</code>来获取Environment中serviceregistry.aggregate.Controller，这个对象在刚才已经被初始化，且它内部的registries数组为空。</p>
+<p>接下来根据用户配置创建不同种类的ServiceController并将其添加到Environment中serviceregistry.aggregate.Controller的registries数组中。</p>
+<p>例如s.serviceEntryStore存储了ServiceController对应于外部服务的实例化对象，同时也将其加入了Environment中serviceregistry.aggregate.Controller的registries数组。</p>
+<p>下面kubernetes为例再详细分析，来看<code>initKubeRegistry()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">initKubeRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serviceControllers</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">aggregate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Controller</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">err</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">kubeRegistry</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">kubecontroller</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewController</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">kubeClient</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">metadataClient</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControllerOptions</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">kubeRegistry</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">kubeRegistry</span>
+	<span style="color:#000">serviceControllers</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AddRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">kubeRegistry</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">return</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Controller</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">AddRegistry</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">registry</span> <span style="color:#000">serviceregistry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Instance</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">storeLock</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Lock</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#204a87;font-weight:bold">defer</span> <span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">storeLock</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Unlock</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#000">registries</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">registries</span>
+	<span style="color:#000">registries</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">registries</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">registry</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">registries</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">registries</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+</code></pre></div><p><code>kubecontroller.NewController()</code>返回一个Kubernetes的ServiceController实例，然后将其添加到第一个参数<code>serviceControllers</code>的<code>registries</code>数组中。这里的<code>serviceControllers</code>也就是上文中提到的Environment中serviceregistry.aggregate.Controller。这是ServiceController对象实例与pilot discovery的Server对象的第一个关联点。</p>
+<p>另外，<code>s.kubeRegistry = kubeRegistry</code>同时也将Kubernetes的ServiceController实例存到pilot discovery的Server的<code>kubeRegistry</code>字段中，这就是上面提到的ServiceController对象实例与pilot discovery的Server对象的第二个关联点。</p>
+<p>这些ServiceController运行后会在内部watch各自的资源，但是截至目前为止也仅仅是watch，还未与pilot discovery server其他组件没有发生关联，下面会看到在后面的初始化过程中会注册一下回调函数。</p>
+<h3 id="注册回调函数-">注册回调函数</h3>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">e</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ServiceDiscovery</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">aggregate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewController</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewPushContext</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">DomainSuffix</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ControllerOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DomainSuffix</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">clusterID</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">getClusterID</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">),</span>
+		<span style="color:#000">environment</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">e</span><span style="color:#000;font-weight:bold">,</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initControllers</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initRegistryEventHandlers</span><span style="color:#000;font-weight:bold">();</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;error initializing handlers: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>注册回调函数的代码在<code>initRegistryEventHandlers()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// initRegistryEventHandlers sets up event handlers for config and service updates
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">initRegistryEventHandlers</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#8f5902;font-style:italic">// Flush cached discovery responses whenever services configuration change.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">serviceHandler</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">svc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Event</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pushReq</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushRequest</span><span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">Full</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">ConfigsUpdated</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">map</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConfigKey</span><span style="color:#000;font-weight:bold">]</span><span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{}{{</span>
+				<span style="color:#000">Kind</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceEntryKind</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">Name</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">svc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Hostname</span><span style="color:#000;font-weight:bold">),</span>
+				<span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">svc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Attributes</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000;font-weight:bold">}:</span> <span style="color:#000;font-weight:bold">{}},</span>
+			<span style="color:#000">Reason</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TriggerReason</span><span style="color:#000;font-weight:bold">{</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceUpdate</span><span style="color:#000;font-weight:bold">},</span>
+		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnvoyXdsServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConfigUpdate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">pushReq</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceController</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">AppendServiceHandler</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">serviceHandler</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;append service handler failed: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这里使用<code>serviceregistry.aggregate.Controller.AppendServiceHandler()</code>注册了处理Service的回调函数。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// AppendServiceHandler implements a service catalog operation
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">c</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Controller</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">AppendServiceHandler</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">f</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Event</span><span style="color:#000;font-weight:bold">))</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">r</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">c</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetRegistries</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">r</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AppendServiceHandler</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">f</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Fail to append service handler to adapter %s&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">r</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Provider</span><span style="color:#000;font-weight:bold">())</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>而在<code>serviceregistry.aggregate.Controller.AppendServiceHandler()</code>内部，则会调用每一个实际的ServiceController实例来把回调函数注册到每个ServiceController实例中。</p>
+<p>例如kubernetes的ServiceController，将这些回调函数注册到自身实例中后，会在watch到相关资源改变的情况下，来调用这些预先注册的回调函数做实际的事情。</p>
+<p>比如上面的这个回调函数的内容</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">serviceHandler</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">svc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Event</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pushReq</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushRequest</span><span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">Full</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">ConfigsUpdated</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">map</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConfigKey</span><span style="color:#000;font-weight:bold">]</span><span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{}{{</span>
+				<span style="color:#000">Kind</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceEntryKind</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000">Name</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">svc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Hostname</span><span style="color:#000;font-weight:bold">),</span>
+				<span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">svc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Attributes</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000;font-weight:bold">}:</span> <span style="color:#000;font-weight:bold">{}},</span>
+			<span style="color:#000">Reason</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TriggerReason</span><span style="color:#000;font-weight:bold">{</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceUpdate</span><span style="color:#000;font-weight:bold">},</span>
+		<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnvoyXdsServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConfigUpdate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">pushReq</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>就是构造一个push请求，然后将其作为参数来更新与envoy通信的discovery server，后者会更新配置并将配置推送给envoy，详细的内容请见后续的文章。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>

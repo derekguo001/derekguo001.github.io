@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第二章 Istiod服务器端证书 | 郭栋的博客</title><meta property="og:title" content="第二章 Istiod服务器端证书" />
+<meta property="og:description" content="概述 Istiod内部的CA Server除了像前文提到的那样会给SDS Server提供证书签名功能之外，同时还会为Istiod内部的服务的证书进行签名，具体包括以下几个服务
+ CA Server自身的服务器端证书 Istiod服务本身的服务器端证书 Istiod的WebHook服务的服务器端证书 Istiod内部的DNS服务的服务器端证书  注意对于内部的这些服务的证书进行签名并非通过gRPC API，而是直接在内部调用函数进行的。另外还需要注意的是这些操作都是在CA Server自身Run()之前执行的，因此仅从这一点来讲也不可能通过gRPC API调用进行。
+根据这些线索，可以大致勾勒出Istiod中相关服务的总体框架
+代码位于pilot/pkg/bootstrap/server.go:NewServer()中
+// CA signing certificate must be created first. 	if args.TLSOptions.CaCertFile == &#34;&#34; &amp;&amp; s.EnableCA() { ... s.ca, err = s.createCA(corev1, caOpts) ... } if err := s.initSecureGrpcListener(args); err != nil { ... } if err := s.initHTTPSWebhookServer(args); err != nil { ... } ... if dns.DNSAddr.Get() != &#34;&#34; { if err := s." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/certificate/istiod_cert/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta itemprop="name" content="第二章 Istiod服务器端证书">
+<meta itemprop="description" content="概述 Istiod内部的CA Server除了像前文提到的那样会给SDS Server提供证书签名功能之外，同时还会为Istiod内部的服务的证书进行签名，具体包括以下几个服务
+ CA Server自身的服务器端证书 Istiod服务本身的服务器端证书 Istiod的WebHook服务的服务器端证书 Istiod内部的DNS服务的服务器端证书  注意对于内部的这些服务的证书进行签名并非通过gRPC API，而是直接在内部调用函数进行的。另外还需要注意的是这些操作都是在CA Server自身Run()之前执行的，因此仅从这一点来讲也不可能通过gRPC API调用进行。
+根据这些线索，可以大致勾勒出Istiod中相关服务的总体框架
+代码位于pilot/pkg/bootstrap/server.go:NewServer()中
+// CA signing certificate must be created first. 	if args.TLSOptions.CaCertFile == &#34;&#34; &amp;&amp; s.EnableCA() { ... s.ca, err = s.createCA(corev1, caOpts) ... } if err := s.initSecureGrpcListener(args); err != nil { ... } if err := s.initHTTPSWebhookServer(args); err != nil { ... } ... if dns.DNSAddr.Get() != &#34;&#34; { if err := s.">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="wordCount" content="450">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第二章 Istiod服务器端证书"/>
+<meta name="twitter:description" content="概述 Istiod内部的CA Server除了像前文提到的那样会给SDS Server提供证书签名功能之外，同时还会为Istiod内部的服务的证书进行签名，具体包括以下几个服务
+ CA Server自身的服务器端证书 Istiod服务本身的服务器端证书 Istiod的WebHook服务的服务器端证书 Istiod内部的DNS服务的服务器端证书  注意对于内部的这些服务的证书进行签名并非通过gRPC API，而是直接在内部调用函数进行的。另外还需要注意的是这些操作都是在CA Server自身Run()之前执行的，因此仅从这一点来讲也不可能通过gRPC API调用进行。
+根据这些线索，可以大致勾勒出Istiod中相关服务的总体框架
+代码位于pilot/pkg/bootstrap/server.go:NewServer()中
+// CA signing certificate must be created first. 	if args.TLSOptions.CaCertFile == &#34;&#34; &amp;&amp; s.EnableCA() { ... s.ca, err = s.createCA(corev1, caOpts) ... } if err := s.initSecureGrpcListener(args); err != nil { ... } if err := s.initHTTPSWebhookServer(args); err != nil { ... } ... if dns.DNSAddr.Get() != &#34;&#34; { if err := s."/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#概述-">概述</a></li>
+    <li><a href="#istiod服务的服务器端证书-">Istiod服务的服务器端证书</a>
+      <ul>
+        <li><a href="#initdnscerts-">initDNSCerts</a></li>
+        <li><a href="#initsecuregrpcserver-">initSecureGrpcServer</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/certificate/">证书管理</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第二章 Istiod服务器端证书</h1>
+    
+	       
+	<h2 id="概述-">概述</h2>
+<p>Istiod内部的CA Server除了像前文提到的那样会给SDS Server提供证书签名功能之外，同时还会为Istiod内部的服务的证书进行签名，具体包括以下几个服务</p>
+<ul>
+<li>CA Server自身的服务器端证书</li>
+<li>Istiod服务本身的服务器端证书</li>
+<li>Istiod的WebHook服务的服务器端证书</li>
+<li>Istiod内部的DNS服务的服务器端证书</li>
+</ul>
+<p>注意对于内部的这些服务的证书进行签名并非通过gRPC API，而是直接在内部调用函数进行的。另外还需要注意的是这些操作都是在CA Server自身<code>Run()</code>之前执行的，因此仅从这一点来讲也不可能通过gRPC API调用进行。</p>
+<p>根据这些线索，可以大致勾勒出Istiod中相关服务的总体框架</p>
+<p>代码位于<code>pilot/pkg/bootstrap/server.go:NewServer()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">	<span style="color:#8f5902;font-style:italic">// CA signing certificate must be created first.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaCertFile</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnableCA</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">createCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">corev1</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initSecureGrpcListener</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initHTTPSWebhookServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">dns</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DNSAddr</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initDNSTLSListener</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">dns</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DNSAddr</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+        <span style="color:#000;font-weight:bold">}</span>
+        <span style="color:#000;font-weight:bold">..</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addStartFunc</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RunCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secureGrpcServer</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+		<span style="color:#000;font-weight:bold">})</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+    <span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>执行的步骤如下：</p>
+<ol>
+<li>使用<code>createCA()</code>创建CA Server</li>
+<li>使用<code>initSecureGrpcListener()</code>初始化Istiod服务，</li>
+<li>使用<code>initHTTPSWebhookServer()</code>初始化WebHook服务</li>
+<li>使用<code>initDNSTLSListener()</code>初始化DNS服务</li>
+<li>使用<code>RunCA()</code>运行ca服务</li>
+</ol>
+<p>其中的2、3、4步中都会包括相应服务的服务器端证书相关操作，并且代码逻辑是完全相同的，因此我们接下来就以Istiod服务为例来进行分析。分析完Istiod的证书操作，下一章会再针对第1步和第5步，详细分析CA Server的内部逻辑。</p>
+<h2 id="istiod服务的服务器端证书-">Istiod服务的服务器端证书</h2>
+<p>Istiod服务的初始化代码位于<code>initSecureGrpcListener()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">initSecureGrpcListener</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initDNSCerts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">host</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IstiodServiceCustomHost</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initSecureGrpcServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">port</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeepaliveOptions</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>其中<code>initDNSCerts()</code>会把各种证书写入到对应的文件中，然后在<code>initSecureGrpcServer()</code>中会读取这些文件再对服务进行相应的初始化。先来看<code>initDNSCerts()</code></p>
+<h3 id="initdnscerts-">initDNSCerts</h3>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#8f5902;font-style:italic">// initDNSCerts will create the certificates to be used by Istiod GRPC server and webhooks.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">initDNSCerts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">hostname</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">customHost</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">namespace</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">keyPEM</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">byte</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">KubernetesCAProvider</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Generating K8S-signed cert for %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">names</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">keyPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">chiron</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenKeyCertK8sCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">kubeClient</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertificatesV1beta1</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">CertificateSigningRequests</span><span style="color:#000;font-weight:bold">(),</span>
+			<span style="color:#000">strings</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Join</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">names</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;,&#34;</span><span style="color:#000;font-weight:bold">),</span> <span style="color:#000">parts</span><span style="color:#000;font-weight:bold">[</span><span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">]</span><span style="color:#ce5c00;font-weight:bold">+</span><span style="color:#4e9a06">&#34;.csr.secret&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">parts</span><span style="color:#000;font-weight:bold">[</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">],</span> <span style="color:#000">defaultCACertPath</span><span style="color:#000;font-weight:bold">)</span>
+
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">caBundlePath</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">defaultCACertPath</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">IstiodCAProvider</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Generating istiod-signed cert for %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">names</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">keyPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenKeyCert</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">names</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">SelfSignedCACertTTL</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;User specified cert provider: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PilotCertProvider</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#8f5902;font-style:italic">// Save the certificates to ./var/run/secrets/istio-dns - this is needed since most of the code we currently
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// use to start grpc and webhooks is based on files. This is a memory-mounted dir.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">MkdirAll</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">dnsCertDir</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0700</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">WriteFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">dnsKeyFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">keyPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0600</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">WriteFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">dnsCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">certChain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0600</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;DNS certificates created in &#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">dnsCertDir</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这个函数会根据环境变量<code>PILOT_CERT_PROVIDER</code>的配置，分几种不同的情况来生成证书</p>
+<ol>
+<li><code>kubernetes</code>，会使用Istiod内部的一个名为<code>chiron</code>的组件，与Kubernetes API Server通信，使用Kubernetes的CA来签发证书，具体的操作可以查看官方文档 <a href="https://istio.io/latest/docs/tasks/security/cert-management/dns-cert/">Istio DNS Certificate Management</a></li>
+<li><code>istiod</code>，这是默认值，这种情况下，会使用istiod内部的CA Server来签发证书。</li>
+</ol>
+<p>生成了私钥和证书之后，会写入对应的文件中，<code>/var/run/secrets/istio-dns/key.pem</code>和<code>/var/run/secrets/istio-dns/cert-chain.pem</code></p>
+<h3 id="initsecuregrpcserver-">initSecureGrpcServer</h3>
+<p>接下来分析<code>initSecureGrpcServer()</code>，它会读取这些证书文件，然后初始化Istiod gRPC服务</p>
+<pre><code>func (s *Server) initSecureGrpcServer(port string, keepalive *istiokeepalive.Options, tlsOptions TLSOptions) error {
+	certDir := dnsCertDir
+
+	key := model.GetOrDefault(tlsOptions.KeyFile, path.Join(certDir, constants.KeyFilename))
+	cert := model.GetOrDefault(tlsOptions.CertFile, path.Join(certDir, constants.CertChainFilename))
+
+	certP, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		return err
+	}
+
+	cp := x509.NewCertPool()
+	var rootCertBytes []byte
+	if tlsOptions.CaCertFile != &quot;&quot; {
+		rootCertBytes, err = ioutil.ReadFile(tlsOptions.CaCertFile)
+		if err != nil {
+			return err
+		}
+	} else {
+		rootCertBytes = s.ca.GetCAKeyCertBundle().GetRootCertPem()
+	}
+
+	cp.AppendCertsFromPEM(rootCertBytes)
+
+	cfg := &amp;tls.Config{
+		Certificates: []tls.Certificate{certP},
+		ClientAuth:   tls.VerifyClientCertIfGiven,
+		ClientCAs:    cp,
+	}
+
+	tlsCreds := credentials.NewTLS(cfg)
+    ...
+	opts = append(opts, grpc.Creds(tlsCreds))
+
+	s.secureGrpcServer = grpc.NewServer(opts...)
+	s.EnvoyXdsServer.Register(s.secureGrpcServer)
+    ...
+}
+</code></pre><p>这个函数会从文件中读取对应的文件，包括三种：服务器私钥、服务器证书和根证书，然后生成<code>tls.Config</code>对象，再进行gRPC服务的初始化。</p>
+<p>在读取这3个文件时，会首先尝试从命令行选项读取</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">	<span style="color:#8f5902;font-style:italic">// Use TLS certificates if provided.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">discoveryCmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PersistentFlags</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">StringVar</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">serverArgs</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;caCertFile&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#4e9a06">&#34;File containing the x509 Server CA Certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">discoveryCmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PersistentFlags</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">StringVar</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">serverArgs</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;tlsCertFile&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#4e9a06">&#34;File containing the x509 Server Certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">discoveryCmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PersistentFlags</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">StringVar</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">serverArgs</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;tlsKeyFile&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#4e9a06">&#34;&#34;</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#4e9a06">&#34;File containing the x509 private key matching --tlsCertFile&#34;</span><span style="color:#000;font-weight:bold">)</span>
+</code></pre></div><p>如果用户在启动Istiod服务的时候通过命令行参数指定了证书文件，就会优先使用，否则才会读取刚才在上一个函数中保存的私钥和证书文件。</p>
+<p>另外，如果用户没有提供根证书的话，会通过CA Server获取根证书。</p>
+<p>以上就是Istiod gRPC服务在初始化过程中证书相关的操作，WebHook、DNS服务的初始化过程基本上是一样的，在此不再赘述。</p>
+<p>下一章会分析CA Server的创建和运行。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>

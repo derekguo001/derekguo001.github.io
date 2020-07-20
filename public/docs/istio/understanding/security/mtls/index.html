@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>双向tls认证 | 郭栋的博客</title><meta property="og:title" content="双向tls认证" />
+<meta property="og:description" content="双向tls的认证，是指两个Envoy Proxy之间的认证。Pod A需要访问Pod B，在Istio中，请求都是由Envoy进行代理的，因此完整的流程是Pod A发出到Pod B的请求，然后请求会被Envoy Proxy A劫持，接着Envoy Proxy A会与Envoy Proxy B进行点对点的认证，认证通过后，请求会由Envoy Proxy A发送给Envoy Proxy B，最后再由Envoy Proxy B将请求转发给Pod B。
+在Envoy Proxy A与Envoy Proxy B之间认证的过程对于Pod A或者Pod B而言都是无感知的。
+Istio中双向tls认证的基本对象是
+apiVersion: security.istio.io/v1beta1 kind: PeerAuthentication 认证配置的策略类型 在具体进行配置的时候，有四种基本的策略
+  DISABLE
+即禁用双向tls认证，这种情况下源Envoy与目的Envoy之间没有对对方进行身份的安全确认，它们之间发送的都是明文数据
+  STRICT
+即严格的双向tls认证模式。源Envoy与目的Envoy之间必须对对方进行身份的安全确认，它们之间发送的都是加密后的数据。
+  PERMISSIVE
+可以进行双向tls认证、也可以不进行认证从而发送明文数据。
+  UNSET
+即没有进行设置，这种情况下会继承上级策略，比如当前namespace的或者整个系统的。如果上级策略都为空，则会默认设置为PERMISSIVE
+  认证配置的范围 Istio中对双向tls认证进行配置的时候，可以有几种不同的范围，范围越小优先级越高：
+  全局
+apiVersion: security.istio.io/v1beta1 kind: PeerAuthentication metadata: name: default namespace: istio-system spec: mtls: mode: STRICT 注意，全局的安全策略名称只能是default，namespace则是istio所在的系统namespace，这里是istio-system" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/understanding/security/mtls/" />
+<meta property="article:published_time" content="2017-01-05T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta itemprop="name" content="双向tls认证">
+<meta itemprop="description" content="双向tls的认证，是指两个Envoy Proxy之间的认证。Pod A需要访问Pod B，在Istio中，请求都是由Envoy进行代理的，因此完整的流程是Pod A发出到Pod B的请求，然后请求会被Envoy Proxy A劫持，接着Envoy Proxy A会与Envoy Proxy B进行点对点的认证，认证通过后，请求会由Envoy Proxy A发送给Envoy Proxy B，最后再由Envoy Proxy B将请求转发给Pod B。
+在Envoy Proxy A与Envoy Proxy B之间认证的过程对于Pod A或者Pod B而言都是无感知的。
+Istio中双向tls认证的基本对象是
+apiVersion: security.istio.io/v1beta1 kind: PeerAuthentication 认证配置的策略类型 在具体进行配置的时候，有四种基本的策略
+  DISABLE
+即禁用双向tls认证，这种情况下源Envoy与目的Envoy之间没有对对方进行身份的安全确认，它们之间发送的都是明文数据
+  STRICT
+即严格的双向tls认证模式。源Envoy与目的Envoy之间必须对对方进行身份的安全确认，它们之间发送的都是加密后的数据。
+  PERMISSIVE
+可以进行双向tls认证、也可以不进行认证从而发送明文数据。
+  UNSET
+即没有进行设置，这种情况下会继承上级策略，比如当前namespace的或者整个系统的。如果上级策略都为空，则会默认设置为PERMISSIVE
+  认证配置的范围 Istio中对双向tls认证进行配置的时候，可以有几种不同的范围，范围越小优先级越高：
+  全局
+apiVersion: security.istio.io/v1beta1 kind: PeerAuthentication metadata: name: default namespace: istio-system spec: mtls: mode: STRICT 注意，全局的安全策略名称只能是default，namespace则是istio所在的系统namespace，这里是istio-system">
+<meta itemprop="datePublished" content="2017-01-05T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="wordCount" content="794">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="双向tls认证"/>
+<meta name="twitter:description" content="双向tls的认证，是指两个Envoy Proxy之间的认证。Pod A需要访问Pod B，在Istio中，请求都是由Envoy进行代理的，因此完整的流程是Pod A发出到Pod B的请求，然后请求会被Envoy Proxy A劫持，接着Envoy Proxy A会与Envoy Proxy B进行点对点的认证，认证通过后，请求会由Envoy Proxy A发送给Envoy Proxy B，最后再由Envoy Proxy B将请求转发给Pod B。
+在Envoy Proxy A与Envoy Proxy B之间认证的过程对于Pod A或者Pod B而言都是无感知的。
+Istio中双向tls认证的基本对象是
+apiVersion: security.istio.io/v1beta1 kind: PeerAuthentication 认证配置的策略类型 在具体进行配置的时候，有四种基本的策略
+  DISABLE
+即禁用双向tls认证，这种情况下源Envoy与目的Envoy之间没有对对方进行身份的安全确认，它们之间发送的都是明文数据
+  STRICT
+即严格的双向tls认证模式。源Envoy与目的Envoy之间必须对对方进行身份的安全确认，它们之间发送的都是加密后的数据。
+  PERMISSIVE
+可以进行双向tls认证、也可以不进行认证从而发送明文数据。
+  UNSET
+即没有进行设置，这种情况下会继承上级策略，比如当前namespace的或者整个系统的。如果上级策略都为空，则会默认设置为PERMISSIVE
+  认证配置的范围 Istio中对双向tls认证进行配置的时候，可以有几种不同的范围，范围越小优先级越高：
+  全局
+apiVersion: security.istio.io/v1beta1 kind: PeerAuthentication metadata: name: default namespace: istio-system spec: mtls: mode: STRICT 注意，全局的安全策略名称只能是default，namespace则是istio所在的系统namespace，这里是istio-system"/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#认证配置的策略类型-">认证配置的策略类型</a></li>
+    <li><a href="#认证配置的范围-">认证配置的范围</a></li>
+    <li><a href="#认证配置的具体方法-">认证配置的具体方法</a></li>
+    <li><a href="#测试case1-默认配置-">测试case1 默认配置</a></li>
+    <li><a href="#测试case2-针对特定服务的配置-">测试case2 针对特定服务的配置</a></li>
+    <li><a href="#参考-">参考</a></li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/understanding/">深入理解Istio</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/understanding/security/">安全机制</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>双向tls认证</h1>
+    
+	       
+	<p><img src="../mtls_1.png" alt="mtls_1"></p>
+<p>双向tls的认证，是指两个Envoy Proxy之间的认证。Pod A需要访问Pod B，在Istio中，请求都是由Envoy进行代理的，因此完整的流程是Pod A发出到Pod B的请求，然后请求会被Envoy Proxy A劫持，接着Envoy Proxy A会与Envoy Proxy B进行点对点的认证，认证通过后，请求会由Envoy Proxy A发送给Envoy Proxy B，最后再由Envoy Proxy B将请求转发给Pod B。</p>
+<p>在Envoy Proxy A与Envoy Proxy B之间认证的过程对于Pod A或者Pod B而言都是无感知的。</p>
+<p>Istio中双向tls认证的基本对象是</p>
+<pre><code>apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+</code></pre><h2 id="认证配置的策略类型-">认证配置的策略类型</h2>
+<p>在具体进行配置的时候，有四种基本的策略</p>
+<ul>
+<li>
+<p>DISABLE</p>
+<p>即禁用双向tls认证，这种情况下源Envoy与目的Envoy之间没有对对方进行身份的安全确认，它们之间发送的都是明文数据</p>
+</li>
+<li>
+<p>STRICT</p>
+<p>即严格的双向tls认证模式。源Envoy与目的Envoy之间必须对对方进行身份的安全确认，它们之间发送的都是加密后的数据。</p>
+</li>
+<li>
+<p>PERMISSIVE</p>
+<p>可以进行双向tls认证、也可以不进行认证从而发送明文数据。</p>
+</li>
+<li>
+<p>UNSET</p>
+<p>即没有进行设置，这种情况下会继承上级策略，比如当前namespace的或者整个系统的。如果上级策略都为空，则会默认设置为PERMISSIVE</p>
+</li>
+</ul>
+<h2 id="认证配置的范围-">认证配置的范围</h2>
+<p>Istio中对双向tls认证进行配置的时候，可以有几种不同的范围，范围越小优先级越高：</p>
+<ul>
+<li>
+<p>全局</p>
+<pre><code>apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT
+</code></pre><p>注意，全局的安全策略名称只能是default，namespace则是istio所在的系统namespace，这里是istio-system</p>
+</li>
+<li>
+<p>namespace级别，即某个namespace中所有服务</p>
+<pre><code>apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  mtls:
+    mode: PERMISSIVE
+</code></pre></li>
+<li>
+<p>负载级别，即某个namespace中某些具体的Pod</p>
+<pre><code>apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: finance
+  mtls:
+    mode: STRICT
+</code></pre><p>会将带有&quot;app: finance&quot;label的Pod所在的Envoy实行STRICT模式。</p>
+</li>
+<li>
+<p>端口级别</p>
+<pre><code>apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: finance
+  mtls:
+    mode: STRICT
+  portLevelMtls:
+    8080:
+      mode: DISABLE
+</code></pre><p>会将带有&quot;app: finance&quot;label的Pod所在的Envoy实行STRICT模式，但是会将其中的8080端口使用DISABLE模式。</p>
+</li>
+</ul>
+<h2 id="认证配置的具体方法-">认证配置的具体方法</h2>
+<p>在Istio中进行双向tls认证配置，需要注意的是客户端和服务器端配置方法是不一样的。例如在namespace foo中有两组服务A和B，每组都有一些Pod，假设服务A的Pod对应的label为&quot;app: A&rdquo;，而服务B的Pod对应的label为&quot;app: B&rdquo;。这时在服务A所在的Pod中访问服务B，要将这一请求设置为STRICT模式，需要配置两处</p>
+<ol>
+<li>
+<p>服务器端配置，给服务B对应的负载配置PeerAuthentication策略，这里配置的是服务B所有关联Pod对应的Envoy Proxy。</p>
+<pre><code>apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: foo
+spec:
+  selector:
+    matchLabels:
+      app: B
+  mtls:
+    mode: STRICT
+</code></pre></li>
+<li>
+<p>客户端配置，给服务B配置DestinationRule策略。这里配置的是所有访问服务B的Pod对应的Envoy Proxy。</p>
+<pre><code>cat &lt;&lt;EOF | kubectl apply -n foo -f -
+apiVersion: &quot;networking.istio.io/v1alpha3&quot;
+kind: &quot;DestinationRule&quot;
+metadata:
+  name: &quot;B&quot;
+spec:
+  host: &quot;B.foo.svc.cluster.local&quot;
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+EOF
+</code></pre></li>
+</ol>
+<p>也就是说客户端配置的时候需要配置目的服务的DestinationRule对象，而服务器端配置的时候需要配置服务器端对应负载的PeerAuthentication对象。</p>
+<h2 id="测试case1-默认配置-">测试case1 默认配置</h2>
+<pre><code>kubectl create ns foo
+kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl create ns bar
+kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n bar
+kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n bar
+kubectl create ns legacy
+kubectl apply -f samples/httpbin/httpbin.yaml -n legacy
+kubectl apply -f samples/sleep/sleep.yaml -n legacy
+</code></pre><p>创建了3个namespace：foo, bar和legacy，每个namespace分别创建了sleep和httpbin两种应用，作为客户端和服务器端。在foo和bar中的Pod有对应的Envoy Proxy，而在legacy中则没有。下面是创建成功后的Pod情况</p>
+<pre><code>[root@master1 istio-1.6.0]# kubectl get pod --all-namespaces
+NAMESPACE      NAME                                    READY   STATUS    RESTARTS   AGE
+bar            httpbin-67576779c-tjl4m                 2/2     Running   0          31m
+bar            sleep-7dc44b8d45-rfhpl                  2/2     Running   0          31m
+foo            httpbin-67576779c-tw6kl                 2/2     Running   0          31m
+foo            sleep-7dc44b8d45-87x2p                  2/2     Running   0          31m
+legacy         httpbin-779c54bf49-h5wrw                1/1     Running   0          31m
+legacy         sleep-f8cbf5b76-b8xgd                   1/1     Running   0          31m
+</code></pre><p>在使用默认的default配置部署Istio的情况下，如果没有设置任何安全策略，默认是PERMISSIVE，即同时允许双向tls认证和不进行任何认证的纯文本数据交换两种方式。注意这只针对有Envoy Proxy的情况，因为这些策略最终的执行者是Envoy，而对于那些没有Envoy Proxy的Pod，例如legacy中的Pod，则只能使用纯文本方式进行收发数据。下面来验证这一点</p>
+<pre><code>[root@master1 istio-1.6.0]# for from in &quot;foo&quot; &quot;bar&quot; &quot;legacy&quot;; do for to in &quot;foo&quot; &quot;bar&quot; &quot;legacy&quot;; do kubectl exec $(kubectl get pod -l app=sleep -n ${from} -o jsonpath={.items..metadata.name}) -c sleep -n ${from} -- curl &quot;http://httpbin.${to}:8000/ip&quot; -s -o /dev/null -w &quot;sleep.${from} to httpbin.${to}: %{http_code}\n&quot;; done; done
+sleep.foo to httpbin.foo: 200
+sleep.foo to httpbin.bar: 200
+sleep.foo to httpbin.legacy: 200
+sleep.bar to httpbin.foo: 200
+sleep.bar to httpbin.bar: 200
+sleep.bar to httpbin.legacy: 200
+sleep.legacy to httpbin.foo: 200
+sleep.legacy to httpbin.bar: 200
+sleep.legacy to httpbin.legacy: 200
+</code></pre><p>可以看到任何两个sleep与httpbin之间都是可以连通的。但是如果进一步观察，发现这些认证方式其实是不同的</p>
+<pre><code>[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+    &quot;X-Forwarded-Client-Cert&quot;: &quot;By=spiffe://cluster.local/ns/foo/sa/httpbin;Hash=41eb8aa0a91782fc1a09df8da85b586c5eaabbca3117f645cdb9df8d998b55f2;Subject=\&quot;\&quot;;URI=spiffe://cluster.local/ns/foo/sa/sleep&quot;
+</code></pre><p>从foo中的sleep访问foo中的httpbin，header中带有&quot;X-Forwarded-Client-Cert&quot;表明使用了双向tls认证。</p>
+<pre><code>[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n legacy -o jsonpath={.items..metadata.name}) -c sleep -n legacy -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+[root@master1 istio-1.6.0]#
+</code></pre><p>而从legacy中的sleep访问legacy中的httpbin，header中则不会带有&quot;X-Forwarded-Client-Cert&rdquo;，因为客户端和服务器端都没有Envoy Proxy，只能进行没有任何认证的纯文本数据交换的方式。</p>
+<p>另外，还可以看出sleep.legacy发出去的请求都是纯文本类型，而sleep.httpbin收到的请求也都是纯文本类型。而foo和bar里面的Pod发送请求时则会优先使用双向tls认证方式(即下面四种)，这些可以自行测试验证。</p>
+<pre><code>sleep.foo to httpbin.foo: 200
+sleep.foo to httpbin.bar: 200
+sleep.bar to httpbin.foo: 200
+sleep.bar to httpbin.bar: 200
+</code></pre><p>清理命令</p>
+<pre><code>kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl delete -f samples/httpbin/httpbin.yaml -n legacy
+kubectl delete -f samples/sleep/sleep.yaml -n legacy
+kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n bar
+kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n bar
+kubectl delete ns foo
+kubectl delete ns legacy
+kubectl delete ns bar
+</code></pre><h2 id="测试case2-针对特定服务的配置-">测试case2 针对特定服务的配置</h2>
+<p>首先，创建一个全局的安全策略，禁用所有的双向tls认证。</p>
+<pre><code>kubectl apply -f - &lt;&lt;EOF
+apiVersion: &quot;security.istio.io/v1beta1&quot;
+kind: &quot;PeerAuthentication&quot;
+metadata:
+  name: &quot;default&quot;
+  namespace: &quot;istio-system&quot;
+spec:
+  mtls:
+    mode: DISABLE
+EOF
+</code></pre><p>然后创建一个foo namespace，并在其中创建带有Envoy Proxy的sleep和httpbin</p>
+<pre><code>kubectl create ns foo
+kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+</code></pre><p>这时进行测试，会发现他们之间可以正常访问，但没有使用双向tls认证，这符合预期，说明全局策略生效。</p>
+<pre><code>
+[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &quot;http://httpbin.foo:8000/ip&quot; -s -o /dev/null -w &quot;sleep.foo to httpbin.foo: %{http_code}\n&quot;
+sleep.foo to httpbin.foo: 200
+[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+[root@master1 istio-1.6.0]#
+</code></pre><p>接下来为服务器端配置PeerAuthentication策略，让其强制执行双向tls认证</p>
+<pre><code>cat &lt;&lt;EOF | kubectl apply -n foo -f -
+apiVersion: &quot;security.istio.io/v1beta1&quot;
+kind: &quot;PeerAuthentication&quot;
+metadata:
+  name: &quot;httpbin&quot;
+  namespace: &quot;foo&quot;
+spec:
+  selector:
+    matchLabels:
+      app: httpbin
+  mtls:
+    mode: STRICT
+EOF
+</code></pre><p>这时再次进行测试</p>
+<pre><code>[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &quot;http://httpbin.foo:8000/ip&quot; -s -o /dev/null -w &quot;sleep.foo to httpbin.foo: %{http_code}\n&quot;
+sleep.foo to httpbin.foo: 503
+[root@master1 istio-1.6.0]#
+</code></pre><p>出现了503错误，这其实是一个tls冲突，因为截至目前为止我们为服务器端设置了强制使用双向tls认证，但是客户端还未设置。</p>
+<p>接下来设置客户端。</p>
+<pre><code>cat &lt;&lt;EOF | kubectl apply -n foo -f -
+apiVersion: &quot;networking.istio.io/v1alpha3&quot;
+kind: &quot;DestinationRule&quot;
+metadata:
+  name: &quot;httpbin&quot;
+spec:
+  host: &quot;httpbin.foo.svc.cluster.local&quot;
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+EOF
+</code></pre><p>然后进行测试，发现现在已经可以正常访问，且使用了双向tls认证，符合预期。</p>
+<pre><code>[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl &quot;http://httpbin.foo:8000/ip&quot; -s -o /dev/null -w &quot;sleep.foo to httpbin.foo: %{http_code}\n&quot;
+sleep.foo to httpbin.foo: 200
+[root@master1 istio-1.6.0]# kubectl exec $(kubectl get pod -l app=sleep -n foo -o jsonpath={.items..metadata.name}) -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s | grep X-Forwarded-Client-Cert
+    &quot;X-Forwarded-Client-Cert&quot;: &quot;By=spiffe://cluster.local/ns/foo/sa/httpbin;Hash=b8a73b2655b270e23eda820e49c56cc9b16521d98cb6c1896eff41c58cc32d56;Subject=\&quot;\&quot;;URI=spiffe://cluster.local/ns/foo/sa/sleep&quot;
+[root@master1 istio-1.6.0]#
+</code></pre><p>清理命令</p>
+<pre><code>kubectl delete PeerAuthentication httpbin -n foo
+kubectl delete DestinationRule httpbin -n foo
+kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo
+kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo
+kubectl delete ns foo
+</code></pre><h2 id="参考-">参考</h2>
+<ul>
+<li><a href="https://istio.io/docs/concepts/security/">https://istio.io/docs/concepts/security/</a></li>
+<li><a href="https://istio.io/docs/tasks/security/authentication/">https://istio.io/docs/tasks/security/authentication/</a></li>
+<li><a href="https://istio.io/docs/reference/config/security/peer_authentication/">https://istio.io/docs/reference/config/security/peer_authentication/</a></li>
+<li><a href="https://istio.io/docs/reference/config/networking/destination-rule">https://istio.io/docs/reference/config/networking/destination-rule</a></li>
+<li><a href="https://zhaohuabing.com/post/2020-05-25-istio-certificate/">https://zhaohuabing.com/post/2020-05-25-istio-certificate/</a></li>
+</ul>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>
