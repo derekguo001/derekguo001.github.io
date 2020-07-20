@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第四章 DiscoveryServer源代码解析 | 郭栋的博客</title><meta property="og:title" content="第四章 DiscoveryServer源代码解析" />
+<meta property="og:description" content="一、对象模型   本节主要关注pilot discovery与envoy交互部分。
+DiscoveryServer相关的对象模型 pilot discovery的服务器server对象包含一个名为DiscoveryServer组件，存储这个对象的字段名为EnvoyXdsServer，见下面的定义
+// Server contains the runtime configuration for the Pilot discovery service. type Server struct { ... EnvoyXdsServer *envoyv2.DiscoveryServer environment *model.Environment ... } 为了避免混淆，下面将pilot discovery的server称为server，而它内部的EnvoyXdsServer *envoyv2.DiscoveryServer对象则称为DiscoveryServer。
+而这个DiscoveryServer的作用就是用来与envoy通信。它实现了两个接口
+  go_control_plane.envoy.service.discovery.v2.AggregatedDiscoveryServiceServer
+这个接口定义了当envoy proxy向server主动发起请求时server如何进行相应
+  model.XDSUpdater
+这个接口定义了当server发现配置信息(包括kube svc、istio crd等)修改了之后主动向envoy proxy推送消息的功能
+  与Envoy proxy交互时涉及到的对象模型 这些对象按照范围可以分成两类：全局的对象、属于某个envoy proxy的局部对象
+  PushContext
+全局对象，包含了当前DiscoveryServer中所有的Service和CRD对象以及一些其它对象，也就意味着所有envoy proxy相关的数据都统一存储在这里，在针对某个具体的envoy proxy处理的时候会进行解析和过滤，进一步提取特定的信息。
+  XdsConnection
+局部变量，表示与某个envoy proxy连接的对象，当envoy proxy向DiscoveryServer发起连接时建立。
+  DiscoveryRequest
+envoy/api/v2/discovery.proto
+局部对象，表示每一个envoy proxy发起的请求的详情，比如envoy proxy会请求cluster、listener等资源。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/discovery/discoveryserver/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta itemprop="name" content="第四章 DiscoveryServer源代码解析">
+<meta itemprop="description" content="一、对象模型   本节主要关注pilot discovery与envoy交互部分。
+DiscoveryServer相关的对象模型 pilot discovery的服务器server对象包含一个名为DiscoveryServer组件，存储这个对象的字段名为EnvoyXdsServer，见下面的定义
+// Server contains the runtime configuration for the Pilot discovery service. type Server struct { ... EnvoyXdsServer *envoyv2.DiscoveryServer environment *model.Environment ... } 为了避免混淆，下面将pilot discovery的server称为server，而它内部的EnvoyXdsServer *envoyv2.DiscoveryServer对象则称为DiscoveryServer。
+而这个DiscoveryServer的作用就是用来与envoy通信。它实现了两个接口
+  go_control_plane.envoy.service.discovery.v2.AggregatedDiscoveryServiceServer
+这个接口定义了当envoy proxy向server主动发起请求时server如何进行相应
+  model.XDSUpdater
+这个接口定义了当server发现配置信息(包括kube svc、istio crd等)修改了之后主动向envoy proxy推送消息的功能
+  与Envoy proxy交互时涉及到的对象模型 这些对象按照范围可以分成两类：全局的对象、属于某个envoy proxy的局部对象
+  PushContext
+全局对象，包含了当前DiscoveryServer中所有的Service和CRD对象以及一些其它对象，也就意味着所有envoy proxy相关的数据都统一存储在这里，在针对某个具体的envoy proxy处理的时候会进行解析和过滤，进一步提取特定的信息。
+  XdsConnection
+局部变量，表示与某个envoy proxy连接的对象，当envoy proxy向DiscoveryServer发起连接时建立。
+  DiscoveryRequest
+envoy/api/v2/discovery.proto
+局部对象，表示每一个envoy proxy发起的请求的详情，比如envoy proxy会请求cluster、listener等资源。">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="wordCount" content="846">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第四章 DiscoveryServer源代码解析"/>
+<meta name="twitter:description" content="一、对象模型   本节主要关注pilot discovery与envoy交互部分。
+DiscoveryServer相关的对象模型 pilot discovery的服务器server对象包含一个名为DiscoveryServer组件，存储这个对象的字段名为EnvoyXdsServer，见下面的定义
+// Server contains the runtime configuration for the Pilot discovery service. type Server struct { ... EnvoyXdsServer *envoyv2.DiscoveryServer environment *model.Environment ... } 为了避免混淆，下面将pilot discovery的server称为server，而它内部的EnvoyXdsServer *envoyv2.DiscoveryServer对象则称为DiscoveryServer。
+而这个DiscoveryServer的作用就是用来与envoy通信。它实现了两个接口
+  go_control_plane.envoy.service.discovery.v2.AggregatedDiscoveryServiceServer
+这个接口定义了当envoy proxy向server主动发起请求时server如何进行相应
+  model.XDSUpdater
+这个接口定义了当server发现配置信息(包括kube svc、istio crd等)修改了之后主动向envoy proxy推送消息的功能
+  与Envoy proxy交互时涉及到的对象模型 这些对象按照范围可以分成两类：全局的对象、属于某个envoy proxy的局部对象
+  PushContext
+全局对象，包含了当前DiscoveryServer中所有的Service和CRD对象以及一些其它对象，也就意味着所有envoy proxy相关的数据都统一存储在这里，在针对某个具体的envoy proxy处理的时候会进行解析和过滤，进一步提取特定的信息。
+  XdsConnection
+局部变量，表示与某个envoy proxy连接的对象，当envoy proxy向DiscoveryServer发起连接时建立。
+  DiscoveryRequest
+envoy/api/v2/discovery.proto
+局部对象，表示每一个envoy proxy发起的请求的详情，比如envoy proxy会请求cluster、listener等资源。"/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#一对象模型-">一、对象模型</a>
+      <ul>
+        <li><a href="#discoveryserver相关的对象模型-">DiscoveryServer相关的对象模型</a></li>
+        <li><a href="#与envoy-proxy交互时涉及到的对象模型-">与Envoy proxy交互时涉及到的对象模型</a></li>
+      </ul>
+    </li>
+    <li><a href="#二discoveryserver创建过程-">二、DiscoveryServer创建过程</a></li>
+    <li><a href="#三相关数据结构的初始化-">三、相关数据结构的初始化</a></li>
+    <li><a href="#四server接受envoy的请求后推送配置-">四、server接受envoy的请求后推送配置</a></li>
+    <li><a href="#五server主动推送配置给envoy-">五、server主动推送配置给envoy</a>
+      <ul>
+        <li><a href="#上半场-">上半场</a></li>
+        <li><a href="#下半场-">下半场</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/discovery/">Pilot Discovery</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第四章 DiscoveryServer源代码解析</h1>
+    
+	       
+	<h2 id="一对象模型-">一、对象模型</h2>
+<figure><a href="../discoveryserver_data_1.png" target="_blank">
+    <img src="../discoveryserver_data_1.png"/> </a>
+</figure>
+
+<p>本节主要关注pilot discovery与envoy交互部分。</p>
+<h3 id="discoveryserver相关的对象模型-">DiscoveryServer相关的对象模型</h3>
+<p>pilot discovery的服务器server对象包含一个名为DiscoveryServer组件，存储这个对象的字段名为EnvoyXdsServer，见下面的定义</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// Server contains the runtime configuration for the Pilot discovery service.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Server</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">EnvoyXdsServer</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">envoyv2</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryServer</span>
+	<span style="color:#000">environment</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>为了避免混淆，下面将pilot discovery的server称为<code>server</code>，而它内部的<code>EnvoyXdsServer *envoyv2.DiscoveryServer</code>对象则称为<code>DiscoveryServer</code>。</p>
+<p>而这个DiscoveryServer的作用就是用来与envoy通信。它实现了两个接口</p>
+<ol>
+<li>
+<p><code>go_control_plane.envoy.service.discovery.v2.AggregatedDiscoveryServiceServer</code></p>
+<p>这个接口定义了当envoy proxy向server主动发起请求时server如何进行相应</p>
+</li>
+<li>
+<p><code>model.XDSUpdater</code></p>
+<p>这个接口定义了当server发现配置信息(包括kube svc、istio crd等)修改了之后主动向envoy proxy推送消息的功能</p>
+</li>
+</ol>
+<h3 id="与envoy-proxy交互时涉及到的对象模型-">与Envoy proxy交互时涉及到的对象模型</h3>
+<p>这些对象按照范围可以分成两类：全局的对象、属于某个envoy proxy的局部对象</p>
+<ul>
+<li>
+<p>PushContext</p>
+<p>全局对象，包含了当前DiscoveryServer中所有的Service和CRD对象以及一些其它对象，也就意味着所有envoy proxy相关的数据都统一存储在这里，在针对某个具体的envoy proxy处理的时候会进行解析和过滤，进一步提取特定的信息。</p>
+</li>
+<li>
+<p>XdsConnection</p>
+<p>局部变量，表示与某个envoy proxy连接的对象，当envoy proxy向DiscoveryServer发起连接时建立。</p>
+</li>
+<li>
+<p>DiscoveryRequest</p>
+<p><code>envoy/api/v2/discovery.proto</code></p>
+<p>局部对象，表示每一个envoy proxy发起的请求的详情，比如envoy proxy会请求cluster、listener等资源。</p>
+</li>
+<li>
+<p>Node</p>
+<p><code>envoy/api/envoy/api/v2/core/base.proto</code></p>
+<p>局部对象，表示每一个envoy proxy本身，里面包含有这个envoy proxy的ID、元数据等一些信息</p>
+</li>
+<li>
+<p>Proxy</p>
+<p>局部对象，与<code>Node</code>作用类似，也是包含envoy proxy对象的信息，但是这里保存的是经过处理后的的信息，相对于<code>Node</code>对象，使用起来会方便很多</p>
+</li>
+<li>
+<p>SidecarScope</p>
+<p>局部对象，用来表示当前envoy proxy的作用范围</p>
+</li>
+</ul>
+<p>在下一节中可以看到这些对象相互的关系以及它们是如何初始化的。</p>
+<h2 id="二discoveryserver创建过程-">二、DiscoveryServer创建过程</h2>
+<p>当创建server时，首先会创建一个Environment对象，并将其存储在server中。接下来它会用Environment作为第一个参数来创建DiscoveryServer对象。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">e</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ServiceDiscovery</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">aggregate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewController</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewPushContext</span><span style="color:#000;font-weight:bold">(),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">clusterID</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">getClusterID</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span><span style="color:#000;font-weight:bold">),</span>
+		<span style="color:#000">environment</span><span style="color:#000;font-weight:bold">:</span>    <span style="color:#000">e</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">EnvoyXdsServer</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">envoyv2</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewDiscoveryServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">e</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Plugins</span><span style="color:#000;font-weight:bold">),</span>
+		<span style="color:#000">forceStop</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ForceStop</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">mux</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">http</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewServeMux</span><span style="color:#000;font-weight:bold">(),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewDiscoveryServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">env</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">plugins</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">out</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">Env</span><span style="color:#000;font-weight:bold">:</span>                     <span style="color:#000">env</span><span style="color:#000;font-weight:bold">,</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">out</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出server和DiscoveryServer都包含了同一个Environment对象，这个Environment对象内部有一个PushContext对象，它在创建Environment对象的内部进行创建，这个PushContext对象在server和envoy交互时起着举足轻重的作用，通过它可以获取所有配置信息，包括kube svc、istio crd等，向envoy推送的各种配置就是通过PushContext来获取并生成的。</p>
+<p>pilot discovery server与envoy的交互分成两种方式：第一种是建立连接后envoy主动向discovery server发起请求，后者进行回应，第二种是当pilot discovery server发现配置信息(包括kube svc、istio crd等)修改了之后主动向envoy推送消息，下面分别来分析这两种不同的处理逻辑。</p>
+<h2 id="三相关数据结构的初始化-">三、相关数据结构的初始化</h2>
+<p>入口函数在<code>StreamAggregatedResources()</code>，关于如何注册以及如何跳转到这个地方可以参考<code>https://github.com/envoyproxy/go-control-plane</code>，里面的README以及一些example。</p>
+<p>当envoy向server发起请求后，server使用这个函数来对envoy连接进行处理，下面是整体的框架</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">StreamAggregatedResources</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stream</span> <span style="color:#000">ads</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AggregatedDiscoveryService_StreamAggregatedResourcesServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+
+	<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">globalPushContext</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">InitContext</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Env</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#000">con</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">newXdsConnection</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">peerAddr</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">stream</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#000">reqChannel</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">xdsapi</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryRequest</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">receiveThread</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">receiveError</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">:</span>
+
+			<span style="color:#204a87;font-weight:bold">switch</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TypeUrl</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">ClusterType</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">v3</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ClusterType</span><span style="color:#000;font-weight:bold">:</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">handleCds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">ListenerType</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">v3</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ListenerType</span><span style="color:#000;font-weight:bold">:</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">handleLds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">RouteType</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">v3</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RouteType</span><span style="color:#000;font-weight:bold">:</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">handleRds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">EndpointType</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">v3</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EndpointType</span><span style="color:#000;font-weight:bold">:</span>
+				<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">handleEds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">:</span>
+				<span style="color:#000">adsLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warnf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;ADS: Unknown watched resources %s&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">String</span><span style="color:#000;font-weight:bold">())</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">pushEv</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#8f5902;font-style:italic">// It is called when config changes.
+</span><span style="color:#8f5902;font-style:italic"></span>            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushConnection</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">pushEv</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">pushEv</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">done</span><span style="color:#000;font-weight:bold">()</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>主要分为以下几个步骤</p>
+<ol>
+<li>
+<p>如果全局的PushContext对象没有初始化，则将其初始化。代码中先用<code>s.globalPushContext()</code>来获取<code>Environment.PushContext</code>，再用<code>InitContext()</code>来将其初始化。</p>
+</li>
+<li>
+<p>当envoy proxy向DiscoveryServer发起连接的时候，会在内部创建针对这个envoy proxy的XdsConnection对象。<code>con := newXdsConnection(peerAddr, stream)</code> 这时连接已经正常建立，初始化阶段结束，会进入监听状态，DiscoveryServer会监听envoy proxy发起的请求。</p>
+</li>
+<li>
+<p>envoy proxy发起第一个具体的请求，DiscoveryServer会从XdsConnection对象中读取数据流，从数据流中提取出DiscoveryRequest对象。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">     <span style="color:#000">reqChannel</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">xdsapi</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryRequest</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+     <span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">receiveThread</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">receiveError</span><span style="color:#000;font-weight:bold">)</span>
+
+     <span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+         <span style="color:#8f5902;font-style:italic">// Block until either a request is received or a push is triggered.
+</span><span style="color:#8f5902;font-style:italic"></span>         <span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+         <span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">:</span>
+             <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">!</span><span style="color:#000">ok</span> <span style="color:#000;font-weight:bold">{</span>
+                 <span style="color:#8f5902;font-style:italic">// Remote side closed connection.
+</span><span style="color:#8f5902;font-style:italic"></span>                 <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">receiveError</span>
+             <span style="color:#000;font-weight:bold">}</span>
+     <span style="color:#ce5c00;font-weight:bold">...</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"> <span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">receiveThread</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">XdsConnection</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">reqChannel</span> <span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">xdsapi</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryRequest</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">errP</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+     <span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+         <span style="color:#000">req</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">stream</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Recv</span><span style="color:#000;font-weight:bold">()</span>
+         <span style="color:#ce5c00;font-weight:bold">...</span>
+         <span style="color:#000;font-weight:bold">}</span>
+         <span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+         <span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">reqChannel</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span> <span style="color:#000">req</span><span style="color:#000;font-weight:bold">:</span>
+         <span style="color:#204a87;font-weight:bold">case</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">stream</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">Done</span><span style="color:#000;font-weight:bold">():</span>
+             <span style="color:#ce5c00;font-weight:bold">...</span>
+             <span style="color:#204a87;font-weight:bold">return</span>
+         <span style="color:#000;font-weight:bold">}</span>
+     <span style="color:#000;font-weight:bold">}</span>
+ <span style="color:#000;font-weight:bold">}</span>
+</code></pre></div></li>
+<li>
+<p>根据DiscoveryRequest的Node成员变量，创建针对当前envoy proxy的Proxy对象并将其初始化(包括Proxy中SidecarScope等成员的初始化)，然后将它存到XdsConnection中的node成员变量中。注意，这一步只在envoy proxy第一次发起具体请求时执行，因为只需要执行一次。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">        <span style="color:#8f5902;font-style:italic">// This should be only set for the first request. The node id may not be set - for example malicious clients.
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">node</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">initConnection</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Node</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+                <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+            <span style="color:#000;font-weight:bold">}</span>
+            <span style="color:#204a87;font-weight:bold">defer</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">removeCon</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConID</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#000;font-weight:bold">}</span>
+</code></pre></div></li>
+<li>
+<p>根据envoy proxy发出的不同类型的请求进行分别处理</p>
+</li>
+</ol>
+<h2 id="四server接受envoy的请求后推送配置-">四、server接受envoy的请求后推送配置</h2>
+<p>接下来根据envoy的请求类型分别进行处理。下面以envoy请求Cluster类型的资源为例详细分析。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">handleCds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">XdsConnection</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">discReq</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">xdsapi</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryRequest</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushCds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">globalPushContext</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">versionInfo</span><span style="color:#000;font-weight:bold">())</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>会将<code>Environment.PushContext</code>作为第二个参数传递给<code>pushCds()</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">pushCds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">XdsConnection</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">version</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">rawClusters</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConfigGenerator</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">BuildClusters</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">node</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">)</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">response</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">cdsDiscoveryResponse</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rawClusters</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Version</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RequestedTypes</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CDS</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">send</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">response</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>进而将<code>Environment.PushContext</code>作为第二个参数传递给<code>BuildClusters()</code>，通过这个函数来获取所有的cluster数据。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">configgen</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ConfigGeneratorImpl</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">BuildClusters</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxy</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Proxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">apiv2</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Cluster</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">clusters</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">apiv2</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Cluster</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">cb</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">NewClusterBuilder</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000">instances</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServiceInstances</span>
+
+	<span style="color:#000">outboundClusters</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">configgen</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">buildOutboundClusters</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">)</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">switch</span> <span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Type</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SidecarProxy</span><span style="color:#000;font-weight:bold">:</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">clusters</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">clusters</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">outboundClusters</span><span style="color:#ce5c00;font-weight:bold">...</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">clusters</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">clusters</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">inboundClusters</span><span style="color:#ce5c00;font-weight:bold">...</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#8f5902;font-style:italic">// Gateways
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">outboundClusters</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">envoyfilter</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ApplyClusterPatches</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">networking</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnvoyFilter_GATEWAY</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">outboundClusters</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">clusters</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">outboundClusters</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">clusters</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">normalizeClusters</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">push</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">clusters</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">clusters</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p><code>BuildClusters()</code>里的逻辑涉及到具体的envoy配置，分为多种不同的cluster，详细的分析过程可以关注这个系列的后续文章。这里重点关注PushContext的使用，这里以其中的<code>buildOutboundClusters()</code>为例</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">configgen</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ConfigGeneratorImpl</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">buildOutboundClusters</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxy</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Proxy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">push</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushContext</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">apiv2</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Cluster</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">clusters</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">([]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">apiv2</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Cluster</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">var</span> <span style="color:#000">services</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Service</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">FilterGatewayClusterConfig</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Type</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Router</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">services</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GatewayServices</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">services</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">push</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Services</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">proxy</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">service</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87;font-weight:bold">range</span> <span style="color:#000">services</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">clusters</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看到这里根据envoy proxy的类型，分情况获取所有service的列表，然后进行数据转换并存储到<code>clusters</code>中。获取service列表最终调用的函数则是PushContext的GatewayServices()或者Services()。</p>
+<p>至此，可以看出PushContext参数在整个流程中是如何被传递以及使用的，它的核心作用就是作为一个获取Istio虚拟对象(包括kube svc和istio crd等)列表的一个媒介。</p>
+<p>另外关于<code>StreamAggregatedResources()</code>中<code>case pushEv := &lt;-con.pushChannel:</code>的分析请见下一节。</p>
+<h2 id="五server主动推送配置给envoy-">五、server主动推送配置给envoy</h2>
+<p><code>DiscoveryServer</code>有一个<code>pushQueue</code>字段，是一个用来存储push操作的队列，当需要给envoy推送配置的时候，会将这个请求加入队列，在后续处理的时候，再出队列进行真正的push操作。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">PushQueue</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">mu</span>   <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sync</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RWMutex</span>
+	<span style="color:#000">cond</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">sync</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Cond</span>
+
+	<span style="color:#8f5902;font-style:italic">// eventsMap stores all connections in the queue. If the same connection is enqueued again, the
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// PushEvents will be merged.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">eventsMap</span> <span style="color:#204a87;font-weight:bold">map</span><span style="color:#000;font-weight:bold">[</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">XdsConnection</span><span style="color:#000;font-weight:bold">]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushRequest</span>
+
+	<span style="color:#8f5902;font-style:italic">// connections maintains ordering of the queue
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">connections</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">XdsConnection</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>它里面主要存储连接对象XdsConnection(即discovery server与envoy proxy的连接)和需要发送到这个envoy proxy连接的请求。</p>
+<p>根据push request加入到pushQueue里这个时间点，可以将整个流程分成上半场和下半场。</p>
+<h3 id="上半场-">上半场</h3>
+<p>下面是上半场的函数调用时序图，注意这个图主要关注函数的调用过程，而不是严格的执行时序。</p>
+<p><img src="../discoveryserver_sequence_1.png" alt="discoveryserver_sequence_1"></p>
+<p><code>DiscoveryServer</code>有一个<code>pushChannel</code>字段，是一个用来暂存push操作的chan</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">PushQueue</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">pushChannel</span> <span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushRequest</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>在初始化的时候，将它的大小设置为10</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewDiscoveryServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">env</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Environment</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">plugins</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">out</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushRequest</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">10</span><span style="color:#000;font-weight:bold">),</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">out</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>当discovery server在watch到Config对象(包括kube svc对象和istio crd等)有更新的时候，会将push请求发送给这个chan</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">ConfigUpdate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">req</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">model</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">PushRequest</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">inboundConfigUpdates</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Increment</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span> <span style="color:#000">req</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>当配置改变时，几乎都是通过调用这里的<code>ConfigUpdate()</code>来传递向envoy proxy主动推送的请求，这个函数在代码中被大量引用。</p>
+<p>当DiscoveryServer启动后，有一个专门的函数来从DiscoveryServer.pushChannel中取得请求数据</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">handleUpdates</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">handleUpdates</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">debounce</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">stopCh</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Push</span><span style="color:#000;font-weight:bold">)</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>里面的<code>debounce()</code>并非从pushChannel中取得request数据就立即发送给envoy，而是有一个请求合并的处理。</p>
+<p>经过一步步调用，最终会将envoy connection和request加入到<code>pushQueue</code>队列中</p>
+<h3 id="下半场-">下半场</h3>
+<p><img src="../discoveryserver_sequence_2.png" alt="discoveryserver_sequence_2"></p>
+<p>在DiscoveryServer启动后，有一个函数从DiscoveryServer.pushQueue这个队列中取出envoy connection和对应的push request对象</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Start</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">sendPushes</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span><span style="color:#000;font-weight:bold">)</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">sendPushes</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">doSendPushes</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">concurrentPushLimit</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushQueue</span><span style="color:#000;font-weight:bold">)</span>
+<span style="color:#000;font-weight:bold">}</span>
+
+
+<span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">doSendPushes</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopCh</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{},</span> <span style="color:#000">semaphore</span> <span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{},</span> <span style="color:#000">queue</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PushQueue</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">default</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">client</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">info</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">queue</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Dequeue</span><span style="color:#000;font-weight:bold">()</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+
+			<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">pushEv</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">XdsEvent</span><span style="color:#000;font-weight:bold">{</span>
+					<span style="color:#000">full</span><span style="color:#000;font-weight:bold">:</span>           <span style="color:#000">info</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Full</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">push</span><span style="color:#000;font-weight:bold">:</span>           <span style="color:#000">info</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Push</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">done</span><span style="color:#000;font-weight:bold">:</span>           <span style="color:#000">doneFunc</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">start</span><span style="color:#000;font-weight:bold">:</span>          <span style="color:#000">info</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Start</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">configsUpdated</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">info</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ConfigsUpdated</span><span style="color:#000;font-weight:bold">,</span>
+					<span style="color:#000">noncePrefix</span><span style="color:#000;font-weight:bold">:</span>    <span style="color:#000">info</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Push</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Version</span><span style="color:#000;font-weight:bold">,</span>
+				<span style="color:#000;font-weight:bold">}</span>
+
+				<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span> <span style="color:#000">pushEv</span><span style="color:#000;font-weight:bold">:</span>
+					<span style="color:#204a87;font-weight:bold">return</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#000;font-weight:bold">}()</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看到在调用doSendPushes()的时候将DiscoveryServer.pushQueue作为了第三个参数，而在doSendPushes()内部则会从pushQueue队列中取出envoy connection和对应的push request对象，并生成XdsEvent，最后将其存入envoy connection的pushChannel中。</p>
+<p>接下来的处理逻辑在<code>StreamAggregatedResources()</code>这个函数中，这个函数的其它内容请见上一节的内容，这里只关注envoy connection的pushChannel的处理。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">DiscoveryServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">StreamAggregatedResources</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stream</span> <span style="color:#000">ads</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AggregatedDiscoveryService_StreamAggregatedResourcesServer</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">con</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">newXdsConnection</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">peerAddr</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">stream</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#000">reqChannel</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">xdsapi</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DiscoveryRequest</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">receiveThread</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">receiveError</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">for</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">select</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">discReq</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ok</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">reqChannel</span><span style="color:#000;font-weight:bold">:</span>
+            <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#204a87;font-weight:bold">case</span> <span style="color:#000">pushEv</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushChannel</span><span style="color:#000;font-weight:bold">:</span>
+			<span style="color:#8f5902;font-style:italic">// It is called when config changes.
+</span><span style="color:#8f5902;font-style:italic"></span>            <span style="color:#ce5c00;font-weight:bold">...</span>
+			<span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">pushConnection</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">con</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">pushEv</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">pushEv</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">done</span><span style="color:#000;font-weight:bold">()</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这里会从envoy connection的pushChannel中返回刚才存入的数据，再调用pushConnection()进行处理，在pushConnection()内部则会根据request的类型分别调用对应的push操作进行真正的推送。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>

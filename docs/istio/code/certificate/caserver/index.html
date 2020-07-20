@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>第三章 CA Server | 郭栋的博客</title><meta property="og:title" content="第三章 CA Server" />
+<meta property="og:description" content="一、对象模型 在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。
+SDS Server和CA Server之间进行通信时的接口名为IstioCertificateServiceServer，它只包含了一个函数CreateCertificate()，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为pkg.server.ca.Server的对象会实现IstioCertificateServiceServer这个Interface中的CreateCertificate()函数以便对请求进行应答。
+除了实现IstioCertificateServiceServer这个Interface之外，pkg.server.ca.Server还实现了另外一个Interface，名为IstioCAServiceServer，其中的函数名为HandleCSR()，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。
+现在回头看pkg.server.ca.Server
+type Server struct { ... Authenticators []authenticator ca CertificateAuthority ... } 其中有两个核心字段
+  Authenticators
+第一个是Authenticators，它是authenticator类型的数组，在与SDS Server进行交互时，CA Server通过这个字段来对客户端的身份进行验证。
+authenticator是一个Interface类型，代码中包含了四种实现
+     认证类型 说明     ClientCertAuthenticator 客户端证书认证   IDTokenAuthenticator 通过OpenID Connect (OIDC) 对客户端请求中的Bearer中的JWT Token进行认证，用于google公有云   KubeJWTAuthenticator 通过kubeclient向Kubernetes API Server发起验证请求，验证请求中的JWT Token   jwtAuthenticator 通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token，主要用于Istiod部署于Kubernetes集群之外的场景    authenticator定义如下" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/code/certificate/caserver/" />
+<meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta itemprop="name" content="第三章 CA Server">
+<meta itemprop="description" content="一、对象模型 在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。
+SDS Server和CA Server之间进行通信时的接口名为IstioCertificateServiceServer，它只包含了一个函数CreateCertificate()，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为pkg.server.ca.Server的对象会实现IstioCertificateServiceServer这个Interface中的CreateCertificate()函数以便对请求进行应答。
+除了实现IstioCertificateServiceServer这个Interface之外，pkg.server.ca.Server还实现了另外一个Interface，名为IstioCAServiceServer，其中的函数名为HandleCSR()，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。
+现在回头看pkg.server.ca.Server
+type Server struct { ... Authenticators []authenticator ca CertificateAuthority ... } 其中有两个核心字段
+  Authenticators
+第一个是Authenticators，它是authenticator类型的数组，在与SDS Server进行交互时，CA Server通过这个字段来对客户端的身份进行验证。
+authenticator是一个Interface类型，代码中包含了四种实现
+     认证类型 说明     ClientCertAuthenticator 客户端证书认证   IDTokenAuthenticator 通过OpenID Connect (OIDC) 对客户端请求中的Bearer中的JWT Token进行认证，用于google公有云   KubeJWTAuthenticator 通过kubeclient向Kubernetes API Server发起验证请求，验证请求中的JWT Token   jwtAuthenticator 通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token，主要用于Istiod部署于Kubernetes集群之外的场景    authenticator定义如下">
+<meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="wordCount" content="1524">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="第三章 CA Server"/>
+<meta name="twitter:description" content="一、对象模型 在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。
+SDS Server和CA Server之间进行通信时的接口名为IstioCertificateServiceServer，它只包含了一个函数CreateCertificate()，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为pkg.server.ca.Server的对象会实现IstioCertificateServiceServer这个Interface中的CreateCertificate()函数以便对请求进行应答。
+除了实现IstioCertificateServiceServer这个Interface之外，pkg.server.ca.Server还实现了另外一个Interface，名为IstioCAServiceServer，其中的函数名为HandleCSR()，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。
+现在回头看pkg.server.ca.Server
+type Server struct { ... Authenticators []authenticator ca CertificateAuthority ... } 其中有两个核心字段
+  Authenticators
+第一个是Authenticators，它是authenticator类型的数组，在与SDS Server进行交互时，CA Server通过这个字段来对客户端的身份进行验证。
+authenticator是一个Interface类型，代码中包含了四种实现
+     认证类型 说明     ClientCertAuthenticator 客户端证书认证   IDTokenAuthenticator 通过OpenID Connect (OIDC) 对客户端请求中的Bearer中的JWT Token进行认证，用于google公有云   KubeJWTAuthenticator 通过kubeclient向Kubernetes API Server发起验证请求，验证请求中的JWT Token   jwtAuthenticator 通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token，主要用于Istiod部署于Kubernetes集群之外的场景    authenticator定义如下"/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#一对象模型-">一、对象模型</a></li>
+    <li><a href="#二istioca对象的创建和运行-">二、IstioCA对象的创建和运行</a>
+      <ul>
+        <li><a href="#自签名证书-">自签名证书</a></li>
+        <li><a href="#使用用户指定的证书-">使用用户指定的证书</a></li>
+      </ul>
+    </li>
+    <li><a href="#三ca-server的创建和运行-">三、CA Server的创建和运行</a>
+      <ul>
+        <li><a href="#创建ca-server对象-">创建CA Server对象</a></li>
+        <li><a href="#设置jwtauthenticator对象-">设置jwtAuthenticator对象</a></li>
+        <li><a href="#运行ca-server对象-">运行CA Server对象</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/">Istio源代码解析</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/code/certificate/">证书管理</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>第三章 CA Server</h1>
+    
+	       
+	<figure><a href="../caserver_data_1.png" target="_blank">
+    <img src="../caserver_data_1.png"/> </a>
+</figure>
+
+<h2 id="一对象模型-">一、对象模型</h2>
+<p>在Istiod内部有一个名为CA Server服务的组件，用来提供证书签名的服务。Pilot Agent内部的SDS Server会向CA Server发起签名请求，CA Server会针对请求进行应答。</p>
+<p>SDS Server和CA Server之间进行通信时的接口名为<code>IstioCertificateServiceServer</code>，它只包含了一个函数<code>CreateCertificate()</code>，一方面SDS Server会通过gRPC调用这个函数，另一方面在CA Server中有一个名为<code>pkg.server.ca.Server</code>的对象会实现<code>IstioCertificateServiceServer</code>这个Interface中的<code>CreateCertificate()</code>函数以便对请求进行应答。</p>
+<p>除了实现<code>IstioCertificateServiceServer</code>这个Interface之外，<code>pkg.server.ca.Server</code>还实现了另外一个Interface，名为<code>IstioCAServiceServer</code>，其中的函数名为<code>HandleCSR()</code>，这个Interface和函数已经被标记为过时的，我们在后续的文章中将不会对其进行分析，不过为了保持代码完整性，仍然把它包含在对象模型的图中。</p>
+<p>现在回头看<code>pkg.server.ca.Server</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Server</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">Authenticators</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#000">authenticator</span>
+	<span style="color:#000">ca</span>             <span style="color:#000">CertificateAuthority</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>其中有两个核心字段</p>
+<ul>
+<li>
+<p><code>Authenticators</code></p>
+<p>第一个是<code>Authenticators</code>，它是<code>authenticator</code>类型的数组，在与SDS Server进行交互时，CA Server通过这个字段来对客户端的身份进行验证。</p>
+<p><code>authenticator</code>是一个Interface类型，代码中包含了四种实现</p>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>认证类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ClientCertAuthenticator</td>
+<td>客户端证书认证</td>
+</tr>
+<tr>
+<td>IDTokenAuthenticator</td>
+<td>通过OpenID Connect (OIDC) 对客户端请求中的<code>Bearer</code>中的JWT Token进行认证，用于google公有云</td>
+</tr>
+<tr>
+<td>KubeJWTAuthenticator</td>
+<td>通过kubeclient向Kubernetes API Server发起验证请求，验证请求中的JWT Token</td>
+</tr>
+<tr>
+<td>jwtAuthenticator</td>
+<td>通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token，主要用于Istiod部署于Kubernetes集群之外的场景</td>
+</tr>
+</tbody>
+</table>
+<p><code>authenticator</code>定义如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">authenticator</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#000">Authenticate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span> <span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Context</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">authenticate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Caller</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#000">AuthenticatorType</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#204a87;font-weight:bold">string</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>其中的<code>AuthenticatorType()</code>返回字符串表示的类型，<code>Authenticate()</code>进行真正的验证工作。</p>
+<ul>
+<li>
+<p><code>ca</code></p>
+<p><code>ca</code>字段的类型为<code>CertificateAuthority</code></p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// CertificateAuthority contains methods to be supported by a CA.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">CertificateAuthority</span> <span style="color:#204a87;font-weight:bold">interface</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#8f5902;font-style:italic">// Sign generates a certificate for a workload or CA, from the given CSR and TTL.
+</span><span style="color:#8f5902;font-style:italic"></span>    <span style="color:#8f5902;font-style:italic">// TODO(myidpt): simplify this interface and pass a struct with cert field values instead.
+</span><span style="color:#8f5902;font-style:italic"></span>    <span style="color:#000">Sign</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">csrPEM</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">byte</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">subjectIDs</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ttl</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Duration</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">forCA</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#204a87;font-weight:bold">byte</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#8f5902;font-style:italic">// SignWithCertChain is similar to Sign but returns the leaf cert and the entire cert chain.
+</span><span style="color:#8f5902;font-style:italic"></span>    <span style="color:#000">SignWithCertChain</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">csrPEM</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">byte</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">subjectIDs</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ttl</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Duration</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">forCA</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">([]</span><span style="color:#204a87;font-weight:bold">byte</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#8f5902;font-style:italic">// GetCAKeyCertBundle returns the KeyCertBundle used by CA.
+</span><span style="color:#8f5902;font-style:italic"></span>    <span style="color:#000">GetCAKeyCertBundle</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>CA Server在处理SDS Server的请求时，就是通过其中的<code>Sign()</code>对客户端的证书签名请求进行签名生成证书，然后再返回给客户端。</p>
+<p>这个Interface中的另一个函数<code>SignWithCertChain()</code>用于CA Server的服务器端证书签名，即CA Server对外提供 服务时，客户端需要对CA Server进行身份验证，因此CA Server也需要配置好服务器端证书，这个证书就是使用<code>SignWithCertChain()</code>进行签署的。</p>
+<p>这个Interface中的最后一个函数<code>GetCAKeyCertBundle()</code>用来返回根证书、私钥、证书、证书链等等证书实体对象，为了方便CA Server在内部将这些证书对象整合成为一个对象<code>KeyCertBundle</code>，然后通过<code>GetCAKeyCertBundle()</code>将它们一起返回。这个函数和<code>Sign()</code>以及<code>SignWithCertChain()</code>一起使用</p>
+</li>
+</ul>
+<p>一个名为<code>IstioCA</code>结构实现了<code>CertificateAuthority</code>接口，因此在<code>pkg.server.ca.Server</code>结构中的<code>ca</code>字段实际上就是一个<code>IstioCA</code>结构。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// IstioCA generates keys and certificates for Istio identities.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">IstioCA</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">keyCertBundle</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span>
+	<span style="color:#000">rootCertRotator</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">SelfSignedCARootCertRotator</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>其中有两个重要成员</p>
+<ul>
+<li>keyCertBundle，为<code>util.KeyCertBundle</code>类型，把相关证书都绑定到一起，这个整体的对象提供了一些接口</li>
+<li>rootCertRotator，为<code>*SelfSignedCARootCertRotator</code>类型，如果是自签名证书的话这个值为空，否则是一个轮询对象，会周期性地更新相关证书</li>
+</ul>
+<p>另外，在签名关于Pilot Agent代码分析的文章中提到了Pilot Agent中核心对象是<code>pilot.pkg.bootstrap.Server</code>，它内部也有一个<code>ca</code>对象</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">type</span> <span style="color:#000">Server</span> <span style="color:#204a87;font-weight:bold">struct</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">ca</span>               <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IstioCA</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这个ca对象就是<code>IstioCA</code>结构，通过这种方式将CA Server与Pilot Agent主进程联系起来。</p>
+<p>在整个Istiod的启动代码中，关于CA相关的主要执行框架如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewServer</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">args</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">PilotArgs</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">args</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TLSOptions</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CaCertFile</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">EnableCA</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">createCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">corev1</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addStartFunc</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RunCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secureGrpcServer</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+		<span style="color:#000;font-weight:bold">})</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><ol>
+<li>使用<code>createCA()</code>创建<code>CertificateAuthority</code>对象，也就是<code>IstioCA</code>结构。</li>
+<li>使用<code>RunCA()</code>来创建CA Server并将其启动</li>
+</ol>
+<p>下面分别进行分析</p>
+<h2 id="二istioca对象的创建和运行-">二、IstioCA对象的创建和运行</h2>
+<p>创建的代码位于<code>createCA()</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">createCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">client</span> <span style="color:#000">corev1</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CoreV1Interface</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">CAOptions</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IstioCA</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">signingKeyFile</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">path</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Join</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">LocalCertDir</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#4e9a06">&#34;ca-key.pem&#34;</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">os</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Stat</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">signingKeyFile</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewSelfSignedIstioCAOptions</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">ctx</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">selfSignedRootCertGracePeriodPercentile</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">SelfSignedCACertTTL</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span>
+			<span style="color:#000">selfSignedRootCertCheckInterval</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">workloadCertTTL</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span>
+			<span style="color:#000">maxCertTTL</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TrustDomain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">-</span><span style="color:#0000cf;font-weight:bold">1</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">enableJitterForRootCertRotator</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">())</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Use local CA certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+
+		<span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewPluggedCertIstioCAOptions</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certChainFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">signingCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">signingKeyFile</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">workloadCertTTL</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">maxCertTTL</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">istioCA</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewIstioCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">istioCA</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCertRotatorChan</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">istioCA</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>整体逻辑如下，根据<code>./etc/cacerts/ca-key.pem</code>是否存在，决定是否采用自签名证书还是已存在的证书，可参见<a href="/docs/istio/code/certificate/intro/#ca-server">CA Server</a></p>
+<p>这两种情况最终都会生成一个<code>IstioCAOptions</code>对象，然后用它创建IstioCA，最后运行<code>IstioCA.Run()</code></p>
+<p>后两步其实都非常简单，代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// NewIstioCA returns a new IstioCA instance.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewIstioCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">opts</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">IstioCAOptions</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">IstioCA</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">ca</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">IstioCA</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">defaultCertTTL</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">DefaultCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">maxCertTTL</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">MaxCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">keyCertBundle</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">livenessProbe</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">probe</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewProbe</span><span style="color:#000;font-weight:bold">(),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CAType</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#000">selfSignedCA</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RotatorConfig</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CheckInterval</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Duration</span><span style="color:#000;font-weight:bold">(</span><span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rootCertRotator</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">NewSelfSignedCARootCertRotator</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RotatorConfig</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">ca</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">IstioCA</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopChan</span> <span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rootCertRotator</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#8f5902;font-style:italic">// Start root cert rotator in a separate goroutine.
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#204a87;font-weight:bold">go</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">rootCertRotator</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stopChan</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出如果是自签名证书，则会创建<code>IstioCA.rootCertRotator</code>对象，然后在<code>IstioCA.Run()</code>中将其启动，关于自签名证书的轮换我们后续单独进行分析，这里不再展开。</p>
+<p>现在回头来看，ca服务的创建过程中比较复杂的逻辑在于如何创建<code>IstioCAOptions</code>对象，下面分别来进行分析。</p>
+<h3 id="自签名证书-">自签名证书</h3>
+<p>如果<code>./etc/cacerts/ca-key.pem</code>不存在，则创建自签名证书。会调用<code>NewSelfSignedIstioCAOptions()</code>来实现</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewSelfSignedIstioCAOptions</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">...</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">caOpts</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">IstioCAOptions</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+
+	<span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">scrtErr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Secrets</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">).</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TODO</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">CASecret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">metav1</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetOptions</span><span style="color:#000;font-weight:bold">{})</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">caOpts</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">IstioCAOptions</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">CAType</span><span style="color:#000;font-weight:bold">:</span>         <span style="color:#000">selfSignedCA</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">DefaultCertTTL</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">defaultCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">MaxCertTTL</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">maxCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">RotatorConfig</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">SelfSignedCARootCertRotatorConfig</span><span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">CheckInterval</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">rootCertCheckInverval</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">caCertTTL</span><span style="color:#000;font-weight:bold">:</span>          <span style="color:#000">caCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">retryInterval</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">cmd</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadSigningCertRetryInterval</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">certInspector</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">certutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewCertUtil</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCertGracePeriodPercentile</span><span style="color:#000;font-weight:bold">),</span>
+			<span style="color:#000">caStorageNamespace</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">dualUse</span><span style="color:#000;font-weight:bold">:</span>            <span style="color:#000">dualUse</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">org</span><span style="color:#000;font-weight:bold">:</span>                <span style="color:#000">org</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">enableJitter</span><span style="color:#000;font-weight:bold">:</span>       <span style="color:#000">enableJitter</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">client</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">client</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000;font-weight:bold">},</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">scrtErr</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to get secret (error: %s), will create one&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">scrtErr</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Load signing key and cert from existing secret %s:%s&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Name</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">updateCertInConfigmap</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetRootCertPem</span><span style="color:#000;font-weight:bold">());</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to write Citadel cert to configmap (%v). Node agents will not be able to connect.&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;The Citadel&#39;s public key is successfully written into configmap istio-security in namespace %s.&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这里的整体逻辑是根据istio-ca-secret这个secret是否存在，决定是新建证书还是使用这个secret中的证书，等所有证书就绪后，会将证书绑定到一起形成<code>IstioCAOptions.KeyCertBundle</code>对象。然后会用根证书更新configmap，最后返回一个IstioCAOptions对象。</p>
+<h4 id="istio-ca-secret不存在的情况-">istio-ca-secret不存在的情况</h4>
+<p>首次运行时，这个secret是不存在的</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">    <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">scrtErr</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to get secret (error: %s), will create one&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">scrtErr</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+        <span style="color:#000">pemCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">pemKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ckErr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenCertKeyFromOptions</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">options</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+        <span style="color:#000">rootCerts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AppendRootCerts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">pemCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+        <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewVerifiedKeyCertBundleFromPem</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">pemCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">pemKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCerts</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to create CA KeyCertBundle (%v)&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#000;font-weight:bold">}</span>
+
+        <span style="color:#8f5902;font-style:italic">// Write the key/cert back to secret so they will be persistent when CA restarts.
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#000">secret</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">k8ssecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">BuildSecret</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">CASecret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">pemCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">pemKey</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">istioCASecretType</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">_</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Secrets</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">).</span><span style="color:#000">Create</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">context</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TODO</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">secret</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">metav1</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CreateOptions</span><span style="color:#000;font-weight:bold">{});</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to write secret to CA (error: %s). Abort.&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+            <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to create CA due to secret write error&#34;</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#000;font-weight:bold">}</span>
+        <span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using self-generated public key: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCerts</span><span style="color:#000;font-weight:bold">))</span>
+    <span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+</code></pre></div><ol>
+<li>使用<code>GenCertKeyFromOptions()</code>来创建ca的私钥和证书</li>
+<li>将ca证书加入到根证书中，将<code>./etc/cacerts/root-cert.pem</code>(由用户配置，如果没有配置则为空)，也会把它加到根证书里</li>
+<li>使用ca私钥、ca证书和根证书来创建IstioCAOptions.KeyCertBundle对象。</li>
+<li>用ca私钥和ca证书创建<code>istio-ca-secret</code> secret</li>
+</ol>
+<h4 id="istio-ca-secret存在的情况-">istio-ca-secret存在的情况</h4>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">    <span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Load signing key and cert from existing secret %s:%s&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Name</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#000">rootCerts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AppendRootCerts</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Data</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">caCertID</span><span style="color:#000;font-weight:bold">],</span> <span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to append root certificates (%v)&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#000;font-weight:bold">}</span>
+        <span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewVerifiedKeyCertBundleFromPem</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Data</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">caCertID</span><span style="color:#000;font-weight:bold">],</span>
+            <span style="color:#000">caSecret</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Data</span><span style="color:#000;font-weight:bold">[</span><span style="color:#000">caPrivateKeyID</span><span style="color:#000;font-weight:bold">],</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCerts</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+            <span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to create CA KeyCertBundle (%v)&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+        <span style="color:#000;font-weight:bold">}</span>
+        <span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infof</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using existing public key: %v&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCerts</span><span style="color:#000;font-weight:bold">))</span>
+    <span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>读取istio-ca-secret</p>
+<ol>
+<li>将istio-ca-secret中的ca证书和<code>./etc/cacerts/root-cert.pem</code>(由用户配置了，如果没有配置则为空)一起组成根证书</li>
+<li>将istio-ca-secret中的ca证书和ca私钥以及刚才的根证书来创建IstioCAOptions.KeyCertBundle对象。</li>
+</ol>
+<p>处理完istio-ca-secret，最后会将根证书以key:map形式插入到istio-security这个configmap中，key是caTLSRootCert，对应的value通过刚才的创建的KeyCertBundleImpl对象的GetRootCertPem()获取，实际上就是根证书的内容。如果configmap不存在则创建它，否则更新。</p>
+<p>最后会返回在这个函数中创建的IstioCAOptions对象。</p>
+<h3 id="使用用户指定的证书-">使用用户指定的证书</h3>
+<p>参见<a href="/docs/istio/code/certificate/intro/#ca-server">CA Server</a></p>
+<p>实现的代码位于NewPluggedCertIstioCAOptions()</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang"><span style="color:#8f5902;font-style:italic">// NewPluggedCertIstioCAOptions returns a new IstioCAOptions instance using given certificate.
+</span><span style="color:#8f5902;font-style:italic"></span><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewPluggedCertIstioCAOptions</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certChainFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">signingCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">signingKeyFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCertFile</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000">defaultCertTTL</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">maxCertTTL</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Duration</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">namespace</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">client</span> <span style="color:#000">corev1</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CoreV1Interface</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">caOpts</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">IstioCAOptions</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">caOpts</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">IstioCAOptions</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">CAType</span><span style="color:#000;font-weight:bold">:</span>         <span style="color:#000">pluggedCertCA</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">DefaultCertTTL</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">defaultCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">MaxCertTTL</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">maxCertTTL</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewVerifiedKeyCertBundleFromFile</span><span style="color:#000;font-weight:bold">(</span>
+		<span style="color:#000">signingCertFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">signingKeyFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">certChainFile</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">rootCertFile</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to create CA KeyCertBundle (%v)&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>首先会使用ca私钥、ca证书、ca证书链和根证书通过NewVerifiedKeyCertBundleFromFile创建IstioCAOptions.KeyCertBundle对象。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#8f5902;font-style:italic">// Validate that the passed in signing cert can be used as CA.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// The check can&#39;t be done inside `KeyCertBundle`, since bundle could also be used to
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// validate workload certificates (i.e., where the leaf certificate is not a CA).
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#000">b</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">signingCertFile</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">block</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">_</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">pem</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Decode</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">b</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">block</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;invalid PEM encoded certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000">cert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">x509</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ParseCertificate</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">block</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Bytes</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;failed to parse X.509 certificate&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">!</span><span style="color:#000">cert</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">IsCA</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">fmt</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;certificate is not authorized to sign other certificates&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>上面代码的含义是验证ca证书的合法性</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-golang" data-lang="golang">	<span style="color:#000">crt</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetCertChainPem</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">crt</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">crt</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">KeyCertBundle</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetRootCertPem</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">updateCertInConfigmap</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">namespace</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">client</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">crt</span><span style="color:#000;font-weight:bold">);</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">pkiCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Errorf</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Failed to write Citadel cert to configmap (%v). Node agents will not be able to connect.&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>然后使用ca证书链的内容来更新istio-security这个configmap，最后返回IstioCAOptions对象。</p>
+<h2 id="三ca-server的创建和运行-">三、CA Server的创建和运行</h2>
+<p>CA Server的创建和运行的代码位于<code>pilot/pkg/bootstrap/server.go</code>中</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">	<span style="color:#8f5902;font-style:italic">// Run the SDS signing server.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// RunCA() must be called after createCA() and initDNSListener()
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// because it depends on the following conditions:
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// 1) CA certificate has been created.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#8f5902;font-style:italic">// 2) grpc server has been started.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">addStartFunc</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">stop</span> <span style="color:#ce5c00;font-weight:bold">&lt;-</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span> <span style="color:#204a87;font-weight:bold">error</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RunCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">secureGrpcServer</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">caOpts</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span>
+		<span style="color:#000;font-weight:bold">})</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>详细分析如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">RunCA</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">grpc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ca</span> <span style="color:#000">caserver</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertificateAuthority</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">CAOptions</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">trustedIssuer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">aud</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">audience</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span>
+
+	<span style="color:#000">ch</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#204a87">make</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87;font-weight:bold">chan</span> <span style="color:#204a87;font-weight:bold">struct</span><span style="color:#000;font-weight:bold">{})</span>
+	<span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">jwtPath</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">tok</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">detectAuthEnv</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">token</span><span style="color:#000;font-weight:bold">))</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warna</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Starting with invalid K8S JWT token&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">token</span><span style="color:#000;font-weight:bold">))</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">iss</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Iss</span>
+			<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Aud</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">aud</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">aud</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Aud</span><span style="color:#000;font-weight:bold">[</span><span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">]</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">startErr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">caserver</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewWithGRPC</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">maxWorkloadCertTTL</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#204a87;font-weight:bold">false</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">{</span><span style="color:#4e9a06">&#34;istiod.istio-system&#34;</span><span style="color:#000;font-weight:bold">},</span> <span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">spiffe</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetTrustDomain</span><span style="color:#000;font-weight:bold">(),</span>
+		<span style="color:#204a87;font-weight:bold">true</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">features</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">JwtPolicy</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">clusterID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">kubeClient</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">multicluster</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetRemoteKubeClient</span><span style="color:#000;font-weight:bold">)</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#8f5902;font-style:italic">// issuer set explicitly or extracted from our own JWT
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">k8sInCluster</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span> <span style="color:#8f5902;font-style:italic">// not running in cluster - in cluster use direct call to apiserver
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">oidcAuth</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">newJwtAuthenticator</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">iss</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TrustDomain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">aud</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">oidcAuth</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using out-of-cluster JWT authentication&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;K8S token doesn&#39;t support OIDC, using only in-cluster auth&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">authenticate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ClientCertAuthenticator</span><span style="color:#000;font-weight:bold">{})</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">serverErr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Run</span><span style="color:#000;font-weight:bold">();</span> <span style="color:#000">serverErr</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+        <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000;font-weight:bold">}</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>主要代码框架：</p>
+<ul>
+<li>使用<code>NewWithGRPC()</code>创建CA Server对象</li>
+<li>从jwt文件中提取出issuer和audience对象，如果issuer非空且Istiod运行在非Kubernetes集群中，则创建jwtAuthenticator对象</li>
+<li>运行CA Server的<code>Run()</code></li>
+</ul>
+<h3 id="创建ca-server对象-">创建CA Server对象</h3>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000">NewWithGRPC</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">grpc</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ca</span> <span style="color:#000">CertificateAuthority</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">ttl</span> <span style="color:#000">time</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Duration</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">forCA</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000">hostlist</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">port</span> <span style="color:#204a87;font-weight:bold">int</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">trustDomain</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">sdsEnabled</span> <span style="color:#204a87;font-weight:bold">bool</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">jwtPolicy</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">clusterID</span> <span style="color:#204a87;font-weight:bold">string</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000">kubeClient</span> <span style="color:#000">kubernetes</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Interface</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000">remoteKubeClientGetter</span> <span style="color:#000">authenticate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">RemoteKubeClientGetter</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">authenticators</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">[]</span><span style="color:#000">authenticator</span><span style="color:#000;font-weight:bold">{</span><span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">authenticate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ClientCertAuthenticator</span><span style="color:#000;font-weight:bold">{}}</span>
+
+	<span style="color:#8f5902;font-style:italic">// Only add k8s jwt authenticator if SDS is enabled.
+</span><span style="color:#8f5902;font-style:italic"></span>	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">sdsEnabled</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">authenticator</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">authenticate</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewKubeJWTAuthenticator</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">kubeClient</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">clusterID</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">remoteKubeClientGetter</span><span style="color:#000;font-weight:bold">,</span>
+			<span style="color:#000">trustDomain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">jwtPolicy</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">authenticators</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">authenticators</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">authenticator</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000">serverCaLog</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Info</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;added K8s JWT authenticator&#34;</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">server</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">Authenticators</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">authenticators</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">authorizer</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">registryAuthorizor</span><span style="color:#000;font-weight:bold">{</span><span style="color:#000">registry</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetIdentityRegistry</span><span style="color:#000;font-weight:bold">()},</span>
+		<span style="color:#000">serverCertTTL</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">ttl</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ca</span><span style="color:#000;font-weight:bold">:</span>             <span style="color:#000">ca</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">hostnames</span><span style="color:#000;font-weight:bold">:</span>      <span style="color:#000">hostlist</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">forCA</span><span style="color:#000;font-weight:bold">:</span>          <span style="color:#000">forCA</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">port</span><span style="color:#000;font-weight:bold">:</span>           <span style="color:#000">port</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">grpcServer</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">monitoring</span><span style="color:#000;font-weight:bold">:</span>     <span style="color:#000">newMonitoringMetrics</span><span style="color:#000;font-weight:bold">(),</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">server</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>这是创建CA Server的代码，主要的逻辑在于设置CA Server对SDS Server的认证方式。可以对照着<a href="/docs/istio/code/certificate/intro/#ca-server">CA Server</a>进行分析</p>
+<ol>
+<li>首先，添加<code>ClientCertAuthenticator</code>这种客户端证书认证的方式</li>
+<li>用<code>NewKubeJWTAuthenticator()</code>增加第二种客户端身份验证的方式，这种会使用kubeclient向Kubernetes API Server发起验证请求，验证SDS Server请求中的JWT Token</li>
+</ol>
+<h3 id="设置jwtauthenticator对象-">设置jwtAuthenticator对象</h3>
+<p>在创建了CA Server后，会根据从jwt文件中读取的内容来创建jwtAuthenticator对象，代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">
+	<span style="color:#000">token</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">ioutil</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ReadFile</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">jwtPath</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">tok</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">detectAuthEnv</span><span style="color:#000;font-weight:bold">(</span><span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">token</span><span style="color:#000;font-weight:bold">))</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Warna</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Starting with invalid K8S JWT token&#34;</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87">string</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">token</span><span style="color:#000;font-weight:bold">))</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">iss</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Iss</span>
+			<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Aud</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">&gt;</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#204a87">len</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">aud</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#0000cf;font-weight:bold">0</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">aud</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">tok</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Aud</span><span style="color:#000;font-weight:bold">[</span><span style="color:#0000cf;font-weight:bold">0</span><span style="color:#000;font-weight:bold">]</span>
+			<span style="color:#000;font-weight:bold">}</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">iss</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#ce5c00;font-weight:bold">&amp;&amp;</span> <span style="color:#8f5902;font-style:italic">// issuer set explicitly or extracted from our own JWT
+</span><span style="color:#8f5902;font-style:italic"></span>		<span style="color:#000">k8sInCluster</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Get</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#4e9a06">&#34;&#34;</span> <span style="color:#000;font-weight:bold">{</span> <span style="color:#8f5902;font-style:italic">// not running in cluster - in cluster use direct call to apiserver
+</span><span style="color:#8f5902;font-style:italic"></span>        <span style="color:#ce5c00;font-weight:bold">...</span>
+		<span style="color:#000">oidcAuth</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">newJwtAuthenticator</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">iss</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">opts</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">TrustDomain</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">aud</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">caServer</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Authenticators</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">oidcAuth</span><span style="color:#000;font-weight:bold">)</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;Using out-of-cluster JWT authentication&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span> <span style="color:#204a87;font-weight:bold">else</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#000">log</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Infoa</span><span style="color:#000;font-weight:bold">(</span><span style="color:#4e9a06">&#34;K8S token doesn&#39;t support OIDC, using only in-cluster auth&#34;</span><span style="color:#000;font-weight:bold">)</span>
+		<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>代码逻辑是，从jwt文件中提取出issuer和audience对象，如果issuer非空且Istiod运行在非Kubernetes集群中，则创建jwtAuthenticator对象，这种认证方式会通过OpenID Connect (OIDC) 向Kubernetes API Server验证请求中的JWT Token，主要用于Istiod部署于Kubernetes集群之外的场景。</p>
+<h3 id="运行ca-server对象-">运行CA Server对象</h3>
+<p>在创建完CA Server对象，且配置好其对SDS Server客户端认证的方式后，会执行<code>Run()</code>操作。代码位于<code>security/pkg/server/ca/server.go</code>中的<code>Run()</code>，代码主要设置gRPC相关的一些参数，在这里不再详细展开。其中有一个步骤是创建服务器端证书</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go">		<span style="color:#000">grpcOptions</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#204a87">append</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">grpcOptions</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">createTLSServerOption</span><span style="color:#000;font-weight:bold">(),</span> <span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">UnaryInterceptor</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">grpc_prometheus</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">UnaryServerInterceptor</span><span style="color:#000;font-weight:bold">))</span>
+</code></pre></div><p>代码如下</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">createTLSServerOption</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ServerOption</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">cp</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">x509</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewCertPool</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">rootCertBytes</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GetCAKeyCertBundle</span><span style="color:#000;font-weight:bold">().</span><span style="color:#000">GetRootCertPem</span><span style="color:#000;font-weight:bold">()</span>
+	<span style="color:#000">cp</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">AppendCertsFromPEM</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">rootCertBytes</span><span style="color:#000;font-weight:bold">)</span>
+
+	<span style="color:#000">config</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">tls</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Config</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">ClientCAs</span><span style="color:#000;font-weight:bold">:</span>  <span style="color:#000">cp</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">ClientAuth</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#000">tls</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">VerifyClientCertIfGiven</span><span style="color:#000;font-weight:bold">,</span>
+		<span style="color:#000">GetCertificate</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#204a87;font-weight:bold">func</span><span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">tls</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ClientHelloInfo</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">tls</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Certificate</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+			<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certificate</span> <span style="color:#ce5c00;font-weight:bold">==</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#ce5c00;font-weight:bold">||</span> <span style="color:#000">shouldRefresh</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certificate</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+				<span style="color:#000">newCert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">getServerCertificate</span><span style="color:#000;font-weight:bold">()</span>
+                <span style="color:#ce5c00;font-weight:bold">...</span>
+				<span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certificate</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#000">newCert</span>
+			<span style="color:#000;font-weight:bold">}</span>
+			<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">certificate</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+		<span style="color:#000;font-weight:bold">},</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#000">grpc</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Creds</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">credentials</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">NewTLS</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">config</span><span style="color:#000;font-weight:bold">))</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>通过IstioCA对象来获取根证书，并且使用<code>getServerCertificate()</code>来获取服务器端证书</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#204a87;font-weight:bold">func</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#000">s</span> <span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">Server</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000">getServerCertificate</span><span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">(</span><span style="color:#ce5c00;font-weight:bold">*</span><span style="color:#000">tls</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">Certificate</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">error</span><span style="color:#000;font-weight:bold">)</span> <span style="color:#000;font-weight:bold">{</span>
+	<span style="color:#000">opts</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">CertOptions</span><span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#000">RSAKeySize</span><span style="color:#000;font-weight:bold">:</span> <span style="color:#0000cf;font-weight:bold">2048</span><span style="color:#000;font-weight:bold">,</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+	<span style="color:#000">csrPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">privPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">util</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">GenCSR</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">opts</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+
+	<span style="color:#000">certPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">signErr</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">ca</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">SignWithCertChain</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">csrPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">hostnames</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">s</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">serverCertTTL</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">false</span><span style="color:#000;font-weight:bold">)</span>
+    <span style="color:#ce5c00;font-weight:bold">...</span>
+
+	<span style="color:#000">cert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">:=</span> <span style="color:#000">tls</span><span style="color:#000;font-weight:bold">.</span><span style="color:#000">X509KeyPair</span><span style="color:#000;font-weight:bold">(</span><span style="color:#000">certPEM</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">privPEM</span><span style="color:#000;font-weight:bold">)</span>
+	<span style="color:#204a87;font-weight:bold">if</span> <span style="color:#000">err</span> <span style="color:#ce5c00;font-weight:bold">!=</span> <span style="color:#204a87;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">{</span>
+		<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#204a87;font-weight:bold">nil</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#000">err</span>
+	<span style="color:#000;font-weight:bold">}</span>
+	<span style="color:#204a87;font-weight:bold">return</span> <span style="color:#ce5c00;font-weight:bold">&amp;</span><span style="color:#000">cert</span><span style="color:#000;font-weight:bold">,</span> <span style="color:#204a87;font-weight:bold">nil</span>
+<span style="color:#000;font-weight:bold">}</span>
+</code></pre></div><p>可以看出CA Server本身的服务器端证书也是使用内部的IstioCA来进行签发的。</p>
+<p>最终服务器端证书会与根证书一起生成<code>tls.Config</code>对象，用于CA Server的gRPC服务中。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>
