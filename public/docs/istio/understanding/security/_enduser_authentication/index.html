@@ -24,10 +24,10 @@
 <meta property="og:description" content="测试case1 对sidecar进行配置 kubectl create ns foo kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete ns foo kubectl apply -f - &lt;&lt;EOF apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; metadata: name: &quot;jwt-example&quot; namespace: istio-system spec: selector: matchLabels: app: httpbin jwtRules: - issuer: &quot;testing@secure.istio.io&quot; jwksUri: &quot;https://raw." />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/understanding/security/_enduser_authentication/" />
-<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta property="article:modified_time" content="2020-07-20T08:13:11+08:00" />
 <meta itemprop="name" content="">
 <meta itemprop="description" content="测试case1 对sidecar进行配置 kubectl create ns foo kubectl apply -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl apply -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/httpbin/httpbin.yaml) -n foo kubectl delete -f &lt;(istioctl kube-inject -f samples/sleep/sleep.yaml) -n foo kubectl delete ns foo kubectl apply -f - &lt;&lt;EOF apiVersion: &quot;security.istio.io/v1beta1&quot; kind: &quot;RequestAuthentication&quot; metadata: name: &quot;jwt-example&quot; namespace: istio-system spec: selector: matchLabels: app: httpbin jwtRules: - issuer: &quot;testing@secure.istio.io&quot; jwksUri: &quot;https://raw.">
-<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="dateModified" content="2020-07-20T08:13:11&#43;08:00" />
 <meta itemprop="wordCount" content="179">
 
 
@@ -87,7 +87,7 @@
 				
 				
 				
-				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+				<a class="nav-link" href="https://github.com/mcsos" target="_blank" ><span>GitHub</span></a>
 			</li>
 			
 			
@@ -150,99 +150,6 @@
   <ul>
     <li class="collapse show" id="docsistio">
       
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
-  </li>
-  <ul>
-    <li class="collapse show" id="docsistiounderstanding">
-      
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingtraffic">
-      
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">安全机制</a>
-  </li>
-  <ul>
-    <li class="collapse show" id="docsistiounderstandingsecurity">
-      
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-    </li>
-  </ul>
-</ul>
-
       
       
       
@@ -383,6 +290,99 @@
       
       
       <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
       
       
     </li>
@@ -544,7 +544,7 @@ EOF
 </code></pre>
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 20, 2020: <a  href="/commit/df4b91e82a95d73ef86c4dad24acd6a08e538bff">Add the source files which are from mcsos/website repo (df4b91e)</a>
 </div>
 </div>
 

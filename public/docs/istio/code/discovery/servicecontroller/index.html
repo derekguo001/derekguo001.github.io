@@ -32,7 +32,7 @@ type ServiceDiscovery interface { Services() ([]*Service, error) GetService(host
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/code/discovery/servicecontroller/" />
 <meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
-<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta property="article:modified_time" content="2020-07-20T08:13:11+08:00" />
 <meta itemprop="name" content="第二章 ServiceController源代码解析">
 <meta itemprop="description" content="一、对象模型 对象模型的定义 pilot discovery内部维护了一套自己的数据结构，外部的对象被同步到pilot discovery内部后会转换成内部的数据结构，当外部的对象更新后，也会自动更新内部的这些对象。当需要向envoy推送配置的时候，会从内部的这些对象转化成envoy格式的配置。
 其中最基本的有三类：Service、Port和IstioEndpoint，都在model模块中定义。大致上可以认为是kubernetes中的service、pod和endpoint在pilot discovery内部的格式。当读取外部的kube service和endpoint后会进行一些格式转换，转换成内部的这些对象。
@@ -43,7 +43,7 @@ type Controller interface { AppendServiceHandler(f func(*Service, Event)) error 
  在pilot discovery后续进行初始化的时候，会调用这里的这两个append函数注册一些回调函数 envoy连接后会向Controller注册自己 当Service和ServiceInstance发生变化的时候，Controller会调用之前注册的回调函数向envoy推送更新后的配置    ServiceDiscovery
 type ServiceDiscovery interface { Services() ([]*Service, error) GetService(hostname host.Name) (*Service, error) InstancesByPort(svc *Service, servicePort int, labels labels.">
 <meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
-<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="dateModified" content="2020-07-20T08:13:11&#43;08:00" />
 <meta itemprop="wordCount" content="881">
 
 
@@ -110,7 +110,7 @@ type ServiceDiscovery interface { Services() ([]*Service, error) GetService(host
 				
 				
 				
-				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+				<a class="nav-link" href="https://github.com/mcsos" target="_blank" ><span>GitHub</span></a>
 			</li>
 			
 			
@@ -173,99 +173,6 @@ type ServiceDiscovery interface { Services() ([]*Service, error) GetService(host
   <ul>
     <li class="collapse show" id="docsistio">
       
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstanding">
-      
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingtraffic">
-      
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingsecurity">
-      
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-    </li>
-  </ul>
-</ul>
-
       
       
       
@@ -406,6 +313,99 @@ type ServiceDiscovery interface { Services() ([]*Service, error) GetService(host
       
       
       <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
       
       
     </li>
@@ -881,7 +881,7 @@ type ServiceDiscovery interface { Services() ([]*Service, error) GetService(host
 
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 20, 2020: <a  href="/commit/df4b91e82a95d73ef86c4dad24acd6a08e538bff">Add the source files which are from mcsos/website repo (df4b91e)</a>
 </div>
 </div>
 
