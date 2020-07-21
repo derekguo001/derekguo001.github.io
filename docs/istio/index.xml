@@ -15,11 +15,11 @@
     
     
     <item>
-      <title>Docs: 深入理解Istio</title>
-      <link>/docs/istio/understanding/</link>
-      <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
+      <title>Docs: Istio源代码解析</title>
+      <link>/docs/istio/code/</link>
+      <pubDate>Wed, 04 Jan 2017 00:00:00 +0000</pubDate>
       
-      <guid>/docs/istio/understanding/</guid>
+      <guid>/docs/istio/code/</guid>
       <description>
         
         
@@ -28,11 +28,11 @@
     </item>
     
     <item>
-      <title>Docs: Istio源代码解析</title>
-      <link>/docs/istio/code/</link>
-      <pubDate>Wed, 04 Jan 2017 00:00:00 +0000</pubDate>
+      <title>Docs: 深入理解Istio</title>
+      <link>/docs/istio/understanding/</link>
+      <pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate>
       
-      <guid>/docs/istio/code/</guid>
+      <guid>/docs/istio/understanding/</guid>
       <description>
         
         

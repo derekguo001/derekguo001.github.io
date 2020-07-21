@@ -32,7 +32,7 @@
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/code/discovery/intro/" />
 <meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
-<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta property="article:modified_time" content="2020-07-20T08:13:11+08:00" />
 <meta itemprop="name" content="第一章 Pilot Discovery概述">
 <meta itemprop="description" content="这是pilot discovery简化版的架构图，左边的ConfigController和ServiceController会作为所有对象的信息源。其中ConfigController获取的对象主要包括VirtualService、DestinationRule等一些crd对象，而ServiceController获取的则是Kubernetes Service和Endpoint等对象。
 在pilot discovery内部有一个DiscoveryServer，它一方面通过ConfigController和ServiceController获取各种对象，另一方面会与envoy进行通信。
@@ -43,7 +43,7 @@
 在文章撰写过程中，参考了其他人的一些文章，在这里向这些文章的作者致谢~
  Istio Pilot代码深度解析 来自赵化冰的博客 Istio中的服务和流量的抽象模型 来自宋净超的博客  ">
 <meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
-<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="dateModified" content="2020-07-20T08:13:11&#43;08:00" />
 <meta itemprop="wordCount" content="17">
 
 
@@ -110,7 +110,7 @@
 				
 				
 				
-				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+				<a class="nav-link" href="https://github.com/mcsos" target="_blank" ><span>GitHub</span></a>
 			</li>
 			
 			
@@ -173,99 +173,6 @@
   <ul>
     <li class="collapse show" id="docsistio">
       
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstanding">
-      
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingtraffic">
-      
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingsecurity">
-      
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-    </li>
-  </ul>
-</ul>
-
       
       
       
@@ -420,6 +327,99 @@
 
       
       
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
     </li>
   </ul>
 </ul>
@@ -535,7 +535,7 @@
 
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 20, 2020: <a  href="/commit/df4b91e82a95d73ef86c4dad24acd6a08e538bff">Add the source files which are from mcsos/website repo (df4b91e)</a>
 </div>
 </div>
 

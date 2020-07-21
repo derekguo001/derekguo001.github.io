@@ -31,7 +31,7 @@ type ConfigStoreCache interface { ConfigStore RegisterEventHandler(kind resource
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/code/discovery/configcontroller/" />
 <meta property="article:published_time" content="2017-01-04T00:00:00+00:00" />
-<meta property="article:modified_time" content="2020-07-13T13:29:51+08:00" />
+<meta property="article:modified_time" content="2020-07-20T08:13:11+08:00" />
 <meta itemprop="name" content="第三章 ConfigController源代码解析">
 <meta itemprop="description" content="一、对象模型 具体的对象模型 Istio中有一些新定义的对象模型，例如VirtualService、DestinationRule等等，它们在kubernetes中作为crd对象存在，它们在Istio中被统称为config，为了管理这些crd对象，Istio内部定义一些controller，被称为ConfigController，除了管理crd对象外，还有一些管理其它对象的ConfigController。具体而言，管理crd对象的ConfigController被称为crd ConfigController，或者简称为crd controller，代码位于pilot/pkg/config/kube/crd
 Envoy除了作为sidecar之外，还可以作为ingress网关，用作整个集群的入口，这种情况下它的工作模式不同于sidecar模式，因此需要另外定义另一种ConfigController来对这种模式下的对象模型进行管理，它们被称为ingress ConfigController，代码位于pilot/pkg/config/kube/ingress
@@ -41,7 +41,7 @@ Envoy除了作为sidecar之外，还可以作为ingress网关，用作整个集�
 type ConfigStore interface { Schemas() collection.Schemas Get(typ resource.GroupVersionKind, name, namespace string) *Config List(typ resource.GroupVersionKind, namespace string) ([]Config, error) Create(config Config) (revision string, err error) Update(config Config) (newRevision string, err error) Delete(typ resource.GroupVersionKind, name, namespace string) error ... } 而另一个对象ConfigSotreCache相对于ConfigStore而言，是一个动态的接口，定义如下
 type ConfigStoreCache interface { ConfigStore RegisterEventHandler(kind resource.GroupVersionKind, handler func(Config, Config, Event)) Run(stop &lt;-chan struct{}) HasSynced() bool } 首先，它继承了ConfigStore，另外它定义了Run()表明它是可以作为一个动态对象来Run，它还定义了一个RegisterEventHandler()函数，用来添加一些回调函数，当config发生改变的时候会触发这些回调函数。">
 <meta itemprop="datePublished" content="2017-01-04T00:00:00&#43;00:00" />
-<meta itemprop="dateModified" content="2020-07-13T13:29:51&#43;08:00" />
+<meta itemprop="dateModified" content="2020-07-20T08:13:11&#43;08:00" />
 <meta itemprop="wordCount" content="674">
 
 
@@ -107,7 +107,7 @@ type ConfigStoreCache interface { ConfigStore RegisterEventHandler(kind resource
 				
 				
 				
-				<a class="nav-link" href="https://github.com/mcsos/website" target="_blank" ><span>GitHub</span></a>
+				<a class="nav-link" href="https://github.com/mcsos" target="_blank" ><span>GitHub</span></a>
 			</li>
 			
 			
@@ -170,99 +170,6 @@ type ConfigStoreCache interface { ConfigStore RegisterEventHandler(kind resource
   <ul>
     <li class="collapse show" id="docsistio">
       
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstanding">
-      
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingtraffic">
-      
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-      
-      
-
-
-
-
-
-
-<ul class="td-sidebar-nav__section pr-md-3">
-  <li class="td-sidebar-nav__section-title">
-    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
-  </li>
-  <ul>
-    <li class="collapse " id="docsistiounderstandingsecurity">
-      
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
-      
-      
-      
-      
-      
-      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
-      
-      
-    </li>
-  </ul>
-</ul>
-
-      
-      
-    </li>
-  </ul>
-</ul>
-
       
       
       
@@ -403,6 +310,99 @@ type ConfigStoreCache interface { ConfigStore RegisterEventHandler(kind resource
       
       
       <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingtraffic">
+      
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
       
       
     </li>
@@ -803,7 +803,7 @@ type ConfigStoreCache interface { ConfigStore RegisterEventHandler(kind resource
 
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified July 13, 2020: <a  href="/commit/5d94f2132dfbeeffae3f605566cec0fd70ed9b4e">update (5d94f21)</a>
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 20, 2020: <a  href="/commit/df4b91e82a95d73ef86c4dad24acd6a08e538bff">Add the source files which are from mcsos/website repo (df4b91e)</a>
 </div>
 </div>
 
