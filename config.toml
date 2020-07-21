@@ -181,4 +181,4 @@ enable = false
 [[menu.main]]
     name = "GitHub"
     weight = 50
-    url = "https://github.com/mcsos/website"
+    url = "https://github.com/mcsos"
