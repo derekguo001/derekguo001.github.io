@@ -21,22 +21,40 @@
 <link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
 
 <title>授权 | 郭栋的博客</title><meta property="og:title" content="授权" />
-<meta property="og:description" content="TODO" />
+<meta property="og:description" content="注：本文最早发表于 Istio Handbook——Istio 服务网格进阶实战 一书中 ，著作权归属于 ServiceMesher 社区。
+概述 授权功能是 Istio 中安全体系的一个重要组成部分，它用来实现访问控制的功能，即判断一个请求是否允许通过，这个请求可以是从外部进入 Istio 内部的请求，也可以是在 Istio 内部从服务 A 到服务 B 的请求。可以把授权功能近似地认为是一种四层到七层的“防火墙”，它会像传统防火墙一样，对数据流进行分析和匹配，然后执行相应的动作。
+本节所有概念和操作都基于 Istio 1.6 版本。
+授权功能是通过授权策略 (AuthorizationPolicy) 来进行配置和使用的，下面是一个完整的授权策略示例：
+apiVersion:security.istio.io/v1beta1kind:AuthorizationPolicymetadata:name:httpbin-policynamespace:foospec:selector:matchLabels:app:httpbinaction:ALLOWrules:- from:- source:principals:[&#34;cluster.local/ns/default/sa/sleep&#34;]to:- operation:methods:[&#34;GET&#34;]paths:[&#34;/info*&#34;]when:- key:request.auth.claims[iss]values:[&#34;https://foo.com&#34;]这个授权策略的含义是：筛选出 foo 这个 namespace 中含有 app: httpbin label 的 pod，对发送到这些 pod 的请求进行匹配，如果匹配成功，则放行当前请求，匹配规则如下：发起请求的 pod 的 Service Account 需要是 cluster.local/ns/default/sa/sleep ，请求使用 HTTP 协议，请求的具体方法类型是 GET ，请求的URL为 /info* ，并且请求中需要包含由 https://foo.com 签发的有效的 JWT Token。
+从这个例子中可以看出一个授权策略主要包含以下几个部分：
+ name。授权策略的名称，仅用于标识授权策略本身，不会影响规则的匹配和执行。 namespace。当前授权策略对象所在的 namespace ，可以使用这个字段配置不同作用范围的授权策略，详见 授权策略的作用范围。 selector。使用 label 来选择当前授权策略作用于哪些 pod 上。注意，这里设置的是服务端的 pod ，因为最终这些规则会转换成 Envoy 规则由服务端的 Envoy Proxy 来具体执行。例如有 client 和 server 两个 service ，它们的 pod 对应的 label 分别为 app: client 和 app: server ，为了针对从 client 到 server 的请求进行配置授权策略，这里的 selector 应该设置为 app: server。 action。可以为 ALLOW (默认值)或者 DENY。 rules。匹配规则，如果匹配成功，就会执行对应的 action ，详见 授权策略的规则详解。  授权策略的作用范围 授权策略可以按照作用域的大小分成三个不同的类型：全局策略、某个 namespace 内的局部策略和具有明确 match label 的授权策略。下面分别进行说明。" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="/docs/istio/understanding/security/authorization/" />
 <meta property="article:published_time" content="2017-01-05T00:00:00+00:00" />
-<meta property="article:modified_time" content="2020-07-20T08:13:11+08:00" />
+<meta property="article:modified_time" content="2020-07-23T21:39:20+08:00" />
 <meta itemprop="name" content="授权">
-<meta itemprop="description" content="TODO">
+<meta itemprop="description" content="注：本文最早发表于 Istio Handbook——Istio 服务网格进阶实战 一书中 ，著作权归属于 ServiceMesher 社区。
+概述 授权功能是 Istio 中安全体系的一个重要组成部分，它用来实现访问控制的功能，即判断一个请求是否允许通过，这个请求可以是从外部进入 Istio 内部的请求，也可以是在 Istio 内部从服务 A 到服务 B 的请求。可以把授权功能近似地认为是一种四层到七层的“防火墙”，它会像传统防火墙一样，对数据流进行分析和匹配，然后执行相应的动作。
+本节所有概念和操作都基于 Istio 1.6 版本。
+授权功能是通过授权策略 (AuthorizationPolicy) 来进行配置和使用的，下面是一个完整的授权策略示例：
+apiVersion:security.istio.io/v1beta1kind:AuthorizationPolicymetadata:name:httpbin-policynamespace:foospec:selector:matchLabels:app:httpbinaction:ALLOWrules:- from:- source:principals:[&#34;cluster.local/ns/default/sa/sleep&#34;]to:- operation:methods:[&#34;GET&#34;]paths:[&#34;/info*&#34;]when:- key:request.auth.claims[iss]values:[&#34;https://foo.com&#34;]这个授权策略的含义是：筛选出 foo 这个 namespace 中含有 app: httpbin label 的 pod，对发送到这些 pod 的请求进行匹配，如果匹配成功，则放行当前请求，匹配规则如下：发起请求的 pod 的 Service Account 需要是 cluster.local/ns/default/sa/sleep ，请求使用 HTTP 协议，请求的具体方法类型是 GET ，请求的URL为 /info* ，并且请求中需要包含由 https://foo.com 签发的有效的 JWT Token。
+从这个例子中可以看出一个授权策略主要包含以下几个部分：
+ name。授权策略的名称，仅用于标识授权策略本身，不会影响规则的匹配和执行。 namespace。当前授权策略对象所在的 namespace ，可以使用这个字段配置不同作用范围的授权策略，详见 授权策略的作用范围。 selector。使用 label 来选择当前授权策略作用于哪些 pod 上。注意，这里设置的是服务端的 pod ，因为最终这些规则会转换成 Envoy 规则由服务端的 Envoy Proxy 来具体执行。例如有 client 和 server 两个 service ，它们的 pod 对应的 label 分别为 app: client 和 app: server ，为了针对从 client 到 server 的请求进行配置授权策略，这里的 selector 应该设置为 app: server。 action。可以为 ALLOW (默认值)或者 DENY。 rules。匹配规则，如果匹配成功，就会执行对应的 action ，详见 授权策略的规则详解。  授权策略的作用范围 授权策略可以按照作用域的大小分成三个不同的类型：全局策略、某个 namespace 内的局部策略和具有明确 match label 的授权策略。下面分别进行说明。">
 <meta itemprop="datePublished" content="2017-01-05T00:00:00&#43;00:00" />
-<meta itemprop="dateModified" content="2020-07-20T08:13:11&#43;08:00" />
-<meta itemprop="wordCount" content="1">
+<meta itemprop="dateModified" content="2020-07-23T21:39:20&#43;08:00" />
+<meta itemprop="wordCount" content="1216">
 
 
 
 <meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="授权"/>
-<meta name="twitter:description" content="TODO"/>
+<meta name="twitter:description" content="注：本文最早发表于 Istio Handbook——Istio 服务网格进阶实战 一书中 ，著作权归属于 ServiceMesher 社区。
+概述 授权功能是 Istio 中安全体系的一个重要组成部分，它用来实现访问控制的功能，即判断一个请求是否允许通过，这个请求可以是从外部进入 Istio 内部的请求，也可以是在 Istio 内部从服务 A 到服务 B 的请求。可以把授权功能近似地认为是一种四层到七层的“防火墙”，它会像传统防火墙一样，对数据流进行分析和匹配，然后执行相应的动作。
+本节所有概念和操作都基于 Istio 1.6 版本。
+授权功能是通过授权策略 (AuthorizationPolicy) 来进行配置和使用的，下面是一个完整的授权策略示例：
+apiVersion:security.istio.io/v1beta1kind:AuthorizationPolicymetadata:name:httpbin-policynamespace:foospec:selector:matchLabels:app:httpbinaction:ALLOWrules:- from:- source:principals:[&#34;cluster.local/ns/default/sa/sleep&#34;]to:- operation:methods:[&#34;GET&#34;]paths:[&#34;/info*&#34;]when:- key:request.auth.claims[iss]values:[&#34;https://foo.com&#34;]这个授权策略的含义是：筛选出 foo 这个 namespace 中含有 app: httpbin label 的 pod，对发送到这些 pod 的请求进行匹配，如果匹配成功，则放行当前请求，匹配规则如下：发起请求的 pod 的 Service Account 需要是 cluster.local/ns/default/sa/sleep ，请求使用 HTTP 协议，请求的具体方法类型是 GET ，请求的URL为 /info* ，并且请求中需要包含由 https://foo.com 签发的有效的 JWT Token。
+从这个例子中可以看出一个授权策略主要包含以下几个部分：
+ name。授权策略的名称，仅用于标识授权策略本身，不会影响规则的匹配和执行。 namespace。当前授权策略对象所在的 namespace ，可以使用这个字段配置不同作用范围的授权策略，详见 授权策略的作用范围。 selector。使用 label 来选择当前授权策略作用于哪些 pod 上。注意，这里设置的是服务端的 pod ，因为最终这些规则会转换成 Envoy 规则由服务端的 Envoy Proxy 来具体执行。例如有 client 和 server 两个 service ，它们的 pod 对应的 label 分别为 app: client 和 app: server ，为了针对从 client 到 server 的请求进行配置授权策略，这里的 selector 应该设置为 app: server。 action。可以为 ALLOW (默认值)或者 DENY。 rules。匹配规则，如果匹配成功，就会执行对应的 action ，详见 授权策略的规则详解。  授权策略的作用范围 授权策略可以按照作用域的大小分成三个不同的类型：全局策略、某个 namespace 内的局部策略和具有明确 match label 的授权策略。下面分别进行说明。"/>
 
 
 
@@ -429,6 +447,32 @@
 
 
 
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#概述">概述</a></li>
+    <li><a href="#授权策略的作用范围">授权策略的作用范围</a>
+      <ul>
+        <li><a href="#全局策略">全局策略</a></li>
+        <li><a href="#某个-namespace-内的局部策略">某个 namespace 内的局部策略</a></li>
+        <li><a href="#具有明确-match-label-的授权策略">具有明确 match label 的授权策略</a></li>
+      </ul>
+    </li>
+    <li><a href="#授权策略的匹配算法">授权策略的匹配算法</a></li>
+    <li><a href="#授权策略的规则详解">授权策略的规则详解</a></li>
+    <li><a href="#操作示例">操作示例</a>
+      <ul>
+        <li><a href="#创建应用">创建应用</a></li>
+        <li><a href="#全局策略测试">全局策略测试</a></li>
+        <li><a href="#测试rule中的字段">测试Rule中的字段</a></li>
+        <li><a href="#授权策略的匹配算法测试">授权策略的匹配算法测试</a></li>
+        <li><a href="#清理">清理</a></li>
+      </ul>
+    </li>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#参考">参考</a></li>
+  </ul>
+</nav>
+
 
 
           </div>
@@ -495,11 +539,376 @@
 	<h1>授权</h1>
     
 	       
-	<p>TODO</p>
+	<p>注：本文最早发表于 <a href="https://github.com/servicemesher/istio-handbook">Istio Handbook——Istio 服务网格进阶实战</a> 一书中 ，著作权归属于 ServiceMesher 社区。</p>
+<h2 id="概述">概述</h2>
+<p>授权功能是 Istio 中安全体系的一个重要组成部分，它用来实现访问控制的功能，即判断一个请求是否允许通过，这个请求可以是从外部进入 Istio 内部的请求，也可以是在 Istio 内部从服务 A 到服务 B 的请求。可以把授权功能近似地认为是一种四层到七层的“防火墙”，它会像传统防火墙一样，对数据流进行分析和匹配，然后执行相应的动作。</p>
+<p>本节所有概念和操作都基于 Istio 1.6 版本。</p>
+<p>授权功能是通过授权策略 (AuthorizationPolicy) 来进行配置和使用的，下面是一个完整的授权策略示例：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">apiVersion</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>security.istio.io/v1beta1<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">kind</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>AuthorizationPolicy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">metadata</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin-policy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">namespace</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>foo<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">selector</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">matchLabels</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">app</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">action</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>ALLOW<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">rules</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- <span style="color:#204a87;font-weight:bold">from</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">source</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">principals</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;cluster.local/ns/default/sa/sleep&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">to</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">operation</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">methods</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;GET&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">paths</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;/info*&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">when</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">key</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>request.auth.claims<span style="color:#000;font-weight:bold">[</span>iss<span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">values</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;https://foo.com&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这个授权策略的含义是：筛选出 <code>foo</code> 这个 namespace 中含有 <code>app: httpbin</code> label 的 pod，对发送到这些 pod 的请求进行匹配，如果匹配成功，则放行当前请求，匹配规则如下：发起请求的 pod 的 Service Account 需要是 <code>cluster.local/ns/default/sa/sleep</code> ，请求使用 HTTP 协议，请求的具体方法类型是 <code>GET</code> ，请求的URL为 <code>/info*</code> ，并且请求中需要包含由 <code>https://foo.com</code> 签发的有效的 JWT Token。</p>
+<p>从这个例子中可以看出一个授权策略主要包含以下几个部分：</p>
+<ul>
+<li><strong>name</strong>。授权策略的名称，仅用于标识授权策略本身，不会影响规则的匹配和执行。</li>
+<li><strong>namespace</strong>。当前授权策略对象所在的 namespace ，可以使用这个字段配置不同作用范围的授权策略，详见 <a href="#%E6%8E%88%E6%9D%83%E7%AD%96%E7%95%A5%E7%9A%84%E4%BD%9C%E7%94%A8%E8%8C%83%E5%9B%B4">授权策略的作用范围</a>。</li>
+<li><strong>selector</strong>。使用 label 来选择当前授权策略作用于哪些 pod 上。注意，这里设置的是服务端的 pod ，因为最终这些规则会转换成 Envoy 规则由服务端的 Envoy Proxy 来具体执行。例如有 client 和 server 两个 service ，它们的 pod 对应的 label 分别为 <code>app: client</code> 和 <code>app: server</code> ，为了针对从 client 到 server 的请求进行配置授权策略，这里的 selector 应该设置为 <code>app: server</code>。</li>
+<li><strong>action</strong>。可以为 <code>ALLOW</code> (默认值)或者 <code>DENY</code>。</li>
+<li><strong>rules</strong>。匹配规则，如果匹配成功，就会执行对应的 action ，详见 <a href="#%E6%8E%88%E6%9D%83%E7%AD%96%E7%95%A5%E7%9A%84%E8%A7%84%E5%88%99%E8%AF%A6%E8%A7%A3">授权策略的规则详解</a>。</li>
+</ul>
+<h2 id="授权策略的作用范围">授权策略的作用范围</h2>
+<p>授权策略可以按照作用域的大小分成三个不同的类型：全局策略、某个 namespace 内的局部策略和具有明确 match label 的授权策略。下面分别进行说明。</p>
+<h3 id="全局策略">全局策略</h3>
+<p>授权策略位于 istio 的 root namespace 中(例如 <code>istio-system</code> )，且匹配所有的 pod。这种规则会作用于整个集群中的所有 pod。</p>
+<p>下面的例子中有3个全局策略，第一个是全局 <code>ALLOW</code> ，第二个和第三个是全局 <code>DENY</code> ，后面这两个作用类似，但又有重要的区别，详见 <a href="#%E6%8E%88%E6%9D%83%E7%AD%96%E7%95%A5%E7%9A%84%E5%8C%B9%E9%85%8D%E7%AE%97%E6%B3%95">授权策略的匹配算法</a>。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: global-allow
+</span><span style="color:#4e9a06">  namespace: istio-system
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - {}
+</span><span style="color:#4e9a06">EOF</span>
+
+kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: global-deny
+</span><span style="color:#4e9a06">  namespace: istio-system
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  action: DENY
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - {}
+</span><span style="color:#4e9a06">EOF</span>
+
+kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: global-deny
+</span><span style="color:#4e9a06">  namespace: istio-system
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  {}
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><h3 id="某个-namespace-内的局部策略">某个 namespace 内的局部策略</h3>
+<p>授权策略位于除了 root namespace 之外的任何一个 namespace 中，且匹配所有的 pod ，这种情况下，这个策略会作用于当前 namespace 中的所有 pod。</p>
+<p>下面的例子中是3个 namespace 级别的策略，第一个是 <code>ALLOW</code> ，第二个和第三个是 <code>DENY</code> ，像全局策略一样，后面这两个作用类似，但又有重要的区别，详见 <a href="#%E6%8E%88%E6%9D%83%E7%AD%96%E7%95%A5%E7%9A%84%E5%8C%B9%E9%85%8D%E7%AE%97%E6%B3%95">授权策略的匹配算法</a>。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: foo-namespace-allow
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - {}
+</span><span style="color:#4e9a06">EOF</span>
+
+kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: foo-namespace-deny
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  action: DENY
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - {}
+</span><span style="color:#4e9a06">EOF</span>
+
+kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: foo-namespace-deny
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  {}
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><h3 id="具有明确-match-label-的授权策略">具有明确 match label 的授权策略</h3>
+<p>这种授权策略仅作用于当前 namespace 下使用 <code>selector</code> 字段匹配到的 pod。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: httpbin-allow
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  selector:
+</span><span style="color:#4e9a06">    matchLabels:
+</span><span style="color:#4e9a06">      app: httpbin
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - {}
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><h2 id="授权策略的匹配算法">授权策略的匹配算法</h2>
+<p>针对某一个请求，会按照一定的匹配算法来执行相应的授权策略：</p>
+<ol>
+<li>如果有任何一条 <code>DENY</code> 授权策略匹配当前请求，则拒绝当前请求。</li>
+<li>针对当前 pod，如果没有任何 <code>ALLOW</code> 授权策略，则放行当前请求。</li>
+<li>如果有任何一条 <code>ALLOW</code> 授权策略匹配当前请求，则放行当前请求。</li>
+<li>拒绝当前请求。</li>
+</ol>
+<p>也就意味着，如果同时有 <code>ALLOW</code> 和 <code>DENY</code> 策略作用于同一个 pod 上，则 <code>DENY</code> 策略会优先执行，其它的 <code>ALLOW</code> 规则就会被忽略。</p>
+<p>注意这个顺序非常重要，有时又会比较隐晦，因此在配置比较复杂策略的时候需要多加小心。</p>
+<p>在上文 <a href="#%E6%8E%88%E6%9D%83%E7%AD%96%E7%95%A5%E7%9A%84%E4%BD%9C%E7%94%A8%E8%8C%83%E5%9B%B4">授权策略的作用范围</a> 中提到授权策略在配置时，有一些细节上的差异，现结合授权策略的匹配算法进行一些分析。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>{}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这是一个 <code>DENY</code> 策略，作用于全局策略或者 namespace 级别(取决于策略所在 namespace 是否为 root namespace )。但是它并没有对当前请求进行匹配，也就意味着按照授权策略的匹配算法在匹配的时候并不会优先匹配到这条规则，因此可以将其作为一个“后备”策略，即全局或者 namespaces 级别的一个默认策略。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">action</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>DENY<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">rules</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- {}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这条规则会真正地匹配当前的请求，又由于它是 <code>DENY</code> 规则，按照授权策略的匹配算法，它会首先得到执行，也就意味着如果配置了一条这种全局或者 namespace 级别的规则，那么所有的其它 <code>ALLOW</code> 规则都不会得到执行。因此这条规则在实际中并没有什么价值。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">action</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>ALLOW<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">rules</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- {}<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这条规则和上一条规则类似，但是它是 <code>ALLOW</code> 规则，因此按照授权策略的匹配算法，它的优先级会低一些，因此也可以像第一条规则一样作为一个全局或者 namespace 级别的默认策略。</p>
+<h2 id="授权策略的规则详解">授权策略的规则详解</h2>
+<p>授权策略中最重要的是其中的 <code>rule</code> 字段，它指定了如何针对当前的请求进行匹配。如果一个授权策略中指定了多条 <code>rule</code> 规则，则它们之间是<code>或</code>的关系，即只要其中任意一条规则匹配成功，那么整个授权策略匹配成功，就会执行相应的 action ，下面是 <a href="#%E6%A6%82%E8%BF%B0">概述</a> 中提到的一个授权策略的例子：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">apiVersion</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>security.istio.io/v1beta1<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">kind</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>AuthorizationPolicy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">metadata</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin-policy<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#204a87;font-weight:bold">namespace</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>foo<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">selector</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">matchLabels</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">app</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">action</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>ALLOW<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">rules</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- <span style="color:#204a87;font-weight:bold">from</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">source</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">principals</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;cluster.local/ns/default/sa/sleep&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">to</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">operation</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">methods</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;GET&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">paths</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;/info*&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">when</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">key</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>request.auth.claims<span style="color:#000;font-weight:bold">[</span>iss<span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">values</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#000;font-weight:bold">[</span><span style="color:#4e9a06">&#34;https://foo.com&#34;</span><span style="color:#000;font-weight:bold">]</span><span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这里的 <code>rules</code> 是一个 <code>rule</code> 的列表。每一条 <code>rule</code> 规则包括三部分： from 、 to 和 when 。类似于防火墙规则， from 和 to 匹配当前请求从哪里来、到哪里去， when 会增加一些额外的检测，当这些条件都满足时，就会认为当前规则匹配成功。如果其中某一部分未进行配置，则认为其可以匹配成功。</p>
+<p>在 <code>rule</code> 中进行配置时，所有的字符串类型都支持类似于通配符的匹配模式，例如 <code>abc*</code> 匹配 &ldquo;abc&rdquo; 和 &ldquo;abcd&rdquo; 等， <code>*xyz</code> 匹配 &ldquo;xyz&rdquo; 和 &ldquo;axyz&rdquo; 等，单独的 <code>*</code> 匹配非空的字符串。</p>
+<p>下面针对具体的字段详细进行说明。</p>
+<ul>
+<li><strong>from</strong>。针对请求的发送方进行匹配，主要包括 principals 、 requestPrincipals 、 namespaces 和 ipBlocks 四个部分。
+<ul>
+<li><strong>principals</strong>。匹配发送方的身份，在 Kubernetes 中可以认为是 pod 的 Service Account。使用这个字段时，首先需要开启 mTLS 功能。例如，当前请求是从 default namespace 中的 pod 中发出，且 pod 使用的 Service Account 名为 <code>sleep</code> ，针对这个请求进行匹配，可将 principals 配置为[<code>cluster.local/ns/default/sa/sleep</code>]。</li>
+<li><strong>requestPrincipals</strong>。匹配请求中的 JWT Token 的 <code>&lt;issuer&gt;/&lt;subject&gt;</code> 字段组合。</li>
+<li><strong>namespaces</strong>。匹配发送方 pod 所在的 namespace。</li>
+<li><strong>ipBlocks</strong>。匹配请求的源 IP 地址段。</li>
+</ul>
+</li>
+<li><strong>to</strong>。针对请求的接收方进行匹配。除了请求接收方，还会对请求本身进行匹配。包括以下字段：
+<ul>
+<li><strong>hosts</strong>。目的 host。</li>
+<li><strong>ports</strong>。目的 port。</li>
+<li><strong>methods</strong>。是指当前请求执行的 HTTP Method 。针对 gRPC 服务，这个字段需要设置为 <code>POST</code>。注意这个字段必须在 HTTP 协议时才进行匹配，如果不是请求不是 HTTP 协议，则认为匹配失败。</li>
+<li><strong>paths</strong>。当前请求执行的 HTTP URL Path 。针对 gRPC 服务，需要配置为 <code>/package.service/method</code> 格式。</li>
+</ul>
+</li>
+<li><strong>when</strong>。这是一个 key/value 格式的 list 。这个字段会针对请求进行一些额外的检测，当这些检测全部匹配时才会认证当前规则匹配成功。例如 <code>key: request.headers[User-Agent]</code> 可以匹配 HTTP Header 中的 <code>User-Agent</code> 字段。所有可配置项可参见 <a href="https://istio.io/latest/docs/reference/config/security/conditions/">Authorization Policy Conditions</a>。</li>
+</ul>
+<p>针对以上字段，还有对应的反向匹配操作，即“取反”匹配，包括 notPrincipals 、 notNamespaces 等。例如 <code>notNamespaces: [&quot;bar&quot;]</code> 表示当发送请求的 pod 不位于 &ldquo;bar&rdquo; 这个 namespace 中的时候匹配成功。</p>
+<p>下面针对上文列出来的授权策略给出一些实际的例子，一方面可以在实际环境中是如何使用这些策略的，另一方面也可以验证前文所述的各种匹配字段、授权策略的匹配算法和授权策略的作用域。</p>
+<h2 id="操作示例">操作示例</h2>
+<h3 id="创建应用">创建应用</h3>
+<p>首先，创建客户端和服务器端的 service 和对应的 pod，使用的例子位于 istio 源代码中 <a href="https://github.com/istio/istio/tree/master/samples">samples</a>：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl create ns foo
+$ kubectl apply -f &lt;<span style="color:#ce5c00;font-weight:bold">(</span>istioctl kube-inject -f samples/httpbin/httpbin.yaml<span style="color:#ce5c00;font-weight:bold">)</span> -n foo
+$ kubectl apply -f &lt;<span style="color:#ce5c00;font-weight:bold">(</span>istioctl kube-inject -f samples/sleep/sleep.yaml<span style="color:#ce5c00;font-weight:bold">)</span> -n foo
+</code></pre></div><p>确认 pod 已正常运行：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl get pod -n foo --show-labels
+NAME                       READY   STATUS    RESTARTS   AGE   LABELS
+httpbin-5d5df46d48-jndgh   2/2     Running   <span style="color:#0000cf;font-weight:bold">0</span>          57s   <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>httpbin,istio.io/rev<span style="color:#ce5c00;font-weight:bold">=</span>,pod-template-hash<span style="color:#ce5c00;font-weight:bold">=</span>5d5df46d48,security.istio.io/tlsMode<span style="color:#ce5c00;font-weight:bold">=</span>isti
+o,version<span style="color:#ce5c00;font-weight:bold">=</span>v1
+sleep-545684d78b-29x74     2/2     Running   <span style="color:#0000cf;font-weight:bold">0</span>          56s   <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep,istio.io/rev<span style="color:#ce5c00;font-weight:bold">=</span>,pod-template-hash<span style="color:#ce5c00;font-weight:bold">=</span>545684d78b,security.istio.io/tlsMode<span style="color:#ce5c00;font-weight:bold">=</span>istio
+$
+</code></pre></div><p>确认可以正常访问，且启用了 mTLS 功能。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">200</span>
+$
+$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl http://httpbin.foo:8000/headers -s <span style="color:#000;font-weight:bold">|</span> grep X-Forwarded-Client-Cert
+    <span style="color:#4e9a06">&#34;X-Forwarded-Client-Cert&#34;</span>: <span style="color:#4e9a06">&#34;By=spiffe://cluster.local/ns/foo/sa/httpbin;Hash=e0f2132eb6ae920cec4b2ea16b9baa33ca388b719a2648636f7a75542852ff0e;Subject=\&#34;\&#34;;URI=spiffe://cluster.local/ns/foo/sa/sleep&#34;</span>
+</code></pre></div><h3 id="全局策略测试">全局策略测试</h3>
+<p>接下来创建一个全局默认的拒绝策略：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: global-deny
+</span><span style="color:#4e9a06">  namespace: istio-system
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  {}
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><p>这时再进行验证连通性：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">403</span>
+</code></pre></div><p>服务拒绝，表明全局拒绝策略生效。</p>
+<p>接下来创建一个 httpbin pod 的 <code>ALLOW</code> 策略：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: httpbin-allow-policy
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  selector:
+</span><span style="color:#4e9a06">    matchLabels:
+</span><span style="color:#4e9a06">      app: httpbin
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - to:
+</span><span style="color:#4e9a06">    - operation:
+</span><span style="color:#4e9a06">        methods: [&#34;GET&#34;]
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><p>按照授权策略的匹配算法，应该可以匹配到第3条规则，因此会执行 <code>ALLOW</code> 动作，运行下面的命令进行验证：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">200</span>
+</code></pre></div><h3 id="测试rule中的字段">测试Rule中的字段</h3>
+<p>下面我们以 Service Account 为例来进行说明。首先来检查 sleep pod 所使用的的 Service Account：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items...serviceAccountName<span style="color:#ce5c00;font-weight:bold">}</span>
+sleep
+</code></pre></div><p>根据 namespace 和 Service Account 构造出 principals 字段，更新授权策略：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: httpbin-allow-policy
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  selector:
+</span><span style="color:#4e9a06">    matchLabels:
+</span><span style="color:#4e9a06">      app: httpbin
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - from:
+</span><span style="color:#4e9a06">    - source:
+</span><span style="color:#4e9a06">        principals: [&#34;cluster.local/ns/foo/sa/sleep&#34;]
+</span><span style="color:#4e9a06">    to:
+</span><span style="color:#4e9a06">    - operation:
+</span><span style="color:#4e9a06">        methods: [&#34;GET&#34;]
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><p>进行验证：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">200</span>
+</code></pre></div><p>访问仍然是放行状态，说明刚才的授权策略是生效的。</p>
+<p>将授权策略中的 Service Account 改为一个其它值：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: httpbin-allow-policy
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  selector:
+</span><span style="color:#4e9a06">    matchLabels:
+</span><span style="color:#4e9a06">      app: httpbin
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - from:
+</span><span style="color:#4e9a06">    - source:
+</span><span style="color:#4e9a06">        principals: [&#34;cluster.local/ns/foo/sa/other-sa&#34;]
+</span><span style="color:#4e9a06">    to:
+</span><span style="color:#4e9a06">    - operation:
+</span><span style="color:#4e9a06">        methods: [&#34;GET&#34;]
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">403</span>
+</code></pre></div><p>访问失败，因为授权策略中配置 Service Account 字段与实际的 Service Account 不匹配。</p>
+<p>同样地，可以配置 From 、 To 和 When 中的其它字段进行测试。</p>
+<h3 id="授权策略的匹配算法测试">授权策略的匹配算法测试</h3>
+<p>首先，删除之前创建的名为 httpbin-allow-policy 的授权策略，目前系统中仅存在一个全局的默认 <code>DENY</code> 策略。</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl delete authorizationpolicies httpbin-allow-policy -n foo
+</code></pre></div><p>接下来创建一个匹配 &ldquo;GET&rdquo; 方法的 <code>ALLOW</code> 策略，名为 httpbin-allow-get：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: httpbin-allow-get
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  selector:
+</span><span style="color:#4e9a06">    matchLabels:
+</span><span style="color:#4e9a06">      app: httpbin
+</span><span style="color:#4e9a06">  action: ALLOW
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - to:
+</span><span style="color:#4e9a06">    - operation:
+</span><span style="color:#4e9a06">        methods: [&#34;GET&#34;]
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><p>这时使用 &ldquo;GET /ip&rdquo; 请求进行测试，由于可以和 httpbin-allow-get 策略匹配，因此按照授权策略的匹配算法，可以匹配到第3条规则，因此可以正常访问：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">200</span>
+</code></pre></div><p>使用 &ldquo;POST /ip&rdquo; 请求进行测试，与 httpbin-allow-get 策略不能匹配，因此会执默认的全局 <code>DENY</code> 策略：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl -X POST <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">403</span>
+</code></pre></div><p>再创建一个 &ldquo;/ip&rdquo; 的 <code>DENY</code> 策略，名为 httpbin-deny-ip-url：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl apply -f - <span style="color:#4e9a06">&lt;&lt;EOF
+</span><span style="color:#4e9a06">apiVersion: security.istio.io/v1beta1
+</span><span style="color:#4e9a06">kind: AuthorizationPolicy
+</span><span style="color:#4e9a06">metadata:
+</span><span style="color:#4e9a06">  name: httpbin-deny-ip-url
+</span><span style="color:#4e9a06">  namespace: foo
+</span><span style="color:#4e9a06">spec:
+</span><span style="color:#4e9a06">  selector:
+</span><span style="color:#4e9a06">    matchLabels:
+</span><span style="color:#4e9a06">      app: httpbin
+</span><span style="color:#4e9a06">  action: DENY
+</span><span style="color:#4e9a06">  rules:
+</span><span style="color:#4e9a06">  - to:
+</span><span style="color:#4e9a06">    - operation:
+</span><span style="color:#4e9a06">        paths: [&#34;/ip&#34;]
+</span><span style="color:#4e9a06">EOF</span>
+</code></pre></div><p>这时使用 &ldquo;GET /ip&rdquo; 请求进行测试：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl <span style="color:#204a87">exec</span> <span style="color:#204a87;font-weight:bold">$(</span>kubectl get pod -l <span style="color:#000">app</span><span style="color:#ce5c00;font-weight:bold">=</span>sleep -n foo -o <span style="color:#000">jsonpath</span><span style="color:#ce5c00;font-weight:bold">={</span>.items..metadata.name<span style="color:#ce5c00;font-weight:bold">}</span><span style="color:#204a87;font-weight:bold">)</span> -c sleep -n foo -- curl <span style="color:#4e9a06">&#34;http://httpbin.foo:8000/ip&#34;</span> -s -o /dev/null -w <span style="color:#4e9a06">&#34;sleep.foo to httpbin.foo: %{http_code}\n&#34;</span>
+sleep.foo to httpbin.foo: <span style="color:#0000cf;font-weight:bold">403</span>
+</code></pre></div><p>可以看出执行失败。失败的原因是 &ldquo;GET /ip&rdquo; 请求与我们刚才创建的 httpbin-allow-get 和 httpbin-deny-ip-url 两个授权策略都会匹配，但是授权策略的匹配算法执行到第1条规则时，会发现匹配 httpbin-deny-ip-url 授权策略，然后就会直接拒绝当前的请求。另一条授权策略 httpbin-allow-get 便无法得到执行。</p>
+<h3 id="清理">清理</h3>
+<p>执行以下操作来清理我们创建过的各种资源：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ kubectl delete authorizationpolicies httpbin-deny-ip-url -n foo
+$ kubectl delete authorizationpolicies httpbin-allow-get -n foo
+$ kubectl delete authorizationpolicies httpbin-allow-policy -n foo
+$ kubectl delete authorizationpolicies global-deny -n istio-system
+$ kubectl delete -f &lt;<span style="color:#ce5c00;font-weight:bold">(</span>istioctl kube-inject -f samples/httpbin/httpbin.yaml<span style="color:#ce5c00;font-weight:bold">)</span> -n foo
+$ kubectl delete -f &lt;<span style="color:#ce5c00;font-weight:bold">(</span>istioctl kube-inject -f samples/sleep/sleep.yaml<span style="color:#ce5c00;font-weight:bold">)</span> -n foo
+$ kubectl delete ns foo
+</code></pre></div><h2 id="总结">总结</h2>
+<p>本节我们详细分析了授权策略的概念和用法，也可以看出利用这些规则可以组合出非常复杂的场景，因此在使用复杂的授权策略时需要非常小心。</p>
+<h2 id="参考">参考</h2>
+<ul>
+<li><a href="https://istio.io/latest/docs/reference/config/security/authorization-policy/">Authorization Policy</a></li>
+<li><a href="https://istio.io/latest/docs/reference/config/security/conditions/">Authorization Policy Conditions</a></li>
+<li><a href="https://istio.io/latest/docs/tasks/security/authorization/">Authorization</a></li>
+</ul>
 
 	
 	
-	<div class="text-muted mt-5 pt-3 border-top">Last modified July 20, 2020: <a  href="/commit/df4b91e82a95d73ef86c4dad24acd6a08e538bff">Add the source files which are from mcsos/website repo (df4b91e)</a>
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 23, 2020: <a  href="/commit/6f7133a163577d2f10b68ef563098cd6b119a7b5">Add content/en/docs/istio/understanding/security/authorization.md (6f7133a)</a>
 </div>
 </div>
 
