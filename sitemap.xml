@@ -43,6 +43,11 @@
   </url>
   
   <url>
+    <loc>/docs/istio/understanding/traffic/ingress/</loc>
+    <lastmod>2020-07-29T23:07:57+08:00</lastmod>
+  </url>
+  
+  <url>
     <loc>/docs/istio/understanding/security/</loc>
     <lastmod>2020-07-20T08:13:11+08:00</lastmod>
   </url>

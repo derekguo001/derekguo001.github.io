@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="generator" content="Hugo 0.68.3" />
+
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+
+
+
+<link rel="shortcut icon" href="/favicons/favicon.ico" >
+<link rel="apple-touch-icon" href="/favicons/apple-touch-icon-180x180.png" sizes="180x180">
+<link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16">
+<link rel="icon" type="image/png" href="/favicons/favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/favicons/android-36x36.png" sizes="36x36">
+<link rel="icon" type="image/png" href="/favicons/android-48x48.png" sizes="48x48">
+<link rel="icon" type="image/png" href="/favicons/android-72x72.png" sizes="72x72">
+<link rel="icon" type="image/png" href="/favicons/android-96x96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/favicons/android-144x144.png" sizes="144x144">
+<link rel="icon" type="image/png" href="/favicons/android-192x192.png" sizes="192x192">
+
+<title>Ingress | 郭栋的博客</title><meta property="og:title" content="Ingress" />
+<meta property="og:description" content="概述 Istio 通过 Istio Ingress 来将集群内部的服务暴露到集群外部，Istio Ingress 相对于 Kubernetes Ingress 的功能做了很多增强，包括四至七层的负载均衡器、TLS配置等等，并且可以将 Istio 在集群内部的流量控制和安全等功能按照同样的方式用于对外提供的服务中，而且可以将 Ingress 与内部的对象统一进行管理。
+Istio Ingress 功能会提供一个 Gateway 的 CRD 对象来让用户对对外暴露的服务进行配置，同时，可以将 Virtual Service 和 Destination Rule 等对应结合起来使用。需要说明的是 Gateway 除了可以用于配置从集群外部访问集群内的服务之外，还可以用于配置从集群内部访问集群外部服务的情况。
+下面是一个 Gateway 的例子：
+apiVersion:networking.istio.io/v1alpha3kind:Gatewaymetadata:name:httpbin-gatewayspec:selector:istio:ingressgatewayservers:- port:number:80name:httpprotocol:HTTPhosts:- &#34;httpbin.example.com&#34;这个例子中配置了用户可以使用 httpbin.example.com 这个 host 来访问集群内部的 httpbin 服务，使用的端口号为 80。
+Gateway 对象本身只负责在 Istio Ingress 上的配置， 使 Istio Ingress 可以识别这个请求并且将其放行，但是从 Istio Ingress 到集群内部的服务之间还需要一个 Virtual Service 对象来提供路由信息，配置如下：
+apiVersion:networking.istio.io/v1alpha3kind:VirtualServicemetadata:name:httpbinspec:hosts:- &#34;httpbin.example.com&#34;gateways:- httpbin-gatewayhttp:- route:- destination:host:httpbin这个 Virtual Service 使用 gateways 字段与刚才配置的 Istio Ingress 对象关联到一起，将到达 Istio Ingress 上的请求转发到集群内部的 httpbin 服务上。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/docs/istio/understanding/traffic/ingress/" />
+<meta property="article:published_time" content="2017-01-05T00:00:00+00:00" />
+<meta property="article:modified_time" content="2020-07-29T23:07:57+08:00" />
+<meta itemprop="name" content="Ingress">
+<meta itemprop="description" content="概述 Istio 通过 Istio Ingress 来将集群内部的服务暴露到集群外部，Istio Ingress 相对于 Kubernetes Ingress 的功能做了很多增强，包括四至七层的负载均衡器、TLS配置等等，并且可以将 Istio 在集群内部的流量控制和安全等功能按照同样的方式用于对外提供的服务中，而且可以将 Ingress 与内部的对象统一进行管理。
+Istio Ingress 功能会提供一个 Gateway 的 CRD 对象来让用户对对外暴露的服务进行配置，同时，可以将 Virtual Service 和 Destination Rule 等对应结合起来使用。需要说明的是 Gateway 除了可以用于配置从集群外部访问集群内的服务之外，还可以用于配置从集群内部访问集群外部服务的情况。
+下面是一个 Gateway 的例子：
+apiVersion:networking.istio.io/v1alpha3kind:Gatewaymetadata:name:httpbin-gatewayspec:selector:istio:ingressgatewayservers:- port:number:80name:httpprotocol:HTTPhosts:- &#34;httpbin.example.com&#34;这个例子中配置了用户可以使用 httpbin.example.com 这个 host 来访问集群内部的 httpbin 服务，使用的端口号为 80。
+Gateway 对象本身只负责在 Istio Ingress 上的配置， 使 Istio Ingress 可以识别这个请求并且将其放行，但是从 Istio Ingress 到集群内部的服务之间还需要一个 Virtual Service 对象来提供路由信息，配置如下：
+apiVersion:networking.istio.io/v1alpha3kind:VirtualServicemetadata:name:httpbinspec:hosts:- &#34;httpbin.example.com&#34;gateways:- httpbin-gatewayhttp:- route:- destination:host:httpbin这个 Virtual Service 使用 gateways 字段与刚才配置的 Istio Ingress 对象关联到一起，将到达 Istio Ingress 上的请求转发到集群内部的 httpbin 服务上。">
+<meta itemprop="datePublished" content="2017-01-05T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2020-07-29T23:07:57&#43;08:00" />
+<meta itemprop="wordCount" content="81">
+
+
+
+<meta itemprop="keywords" content="" /><meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Ingress"/>
+<meta name="twitter:description" content="概述 Istio 通过 Istio Ingress 来将集群内部的服务暴露到集群外部，Istio Ingress 相对于 Kubernetes Ingress 的功能做了很多增强，包括四至七层的负载均衡器、TLS配置等等，并且可以将 Istio 在集群内部的流量控制和安全等功能按照同样的方式用于对外提供的服务中，而且可以将 Ingress 与内部的对象统一进行管理。
+Istio Ingress 功能会提供一个 Gateway 的 CRD 对象来让用户对对外暴露的服务进行配置，同时，可以将 Virtual Service 和 Destination Rule 等对应结合起来使用。需要说明的是 Gateway 除了可以用于配置从集群外部访问集群内的服务之外，还可以用于配置从集群内部访问集群外部服务的情况。
+下面是一个 Gateway 的例子：
+apiVersion:networking.istio.io/v1alpha3kind:Gatewaymetadata:name:httpbin-gatewayspec:selector:istio:ingressgatewayservers:- port:number:80name:httpprotocol:HTTPhosts:- &#34;httpbin.example.com&#34;这个例子中配置了用户可以使用 httpbin.example.com 这个 host 来访问集群内部的 httpbin 服务，使用的端口号为 80。
+Gateway 对象本身只负责在 Istio Ingress 上的配置， 使 Istio Ingress 可以识别这个请求并且将其放行，但是从 Istio Ingress 到集群内部的服务之间还需要一个 Virtual Service 对象来提供路由信息，配置如下：
+apiVersion:networking.istio.io/v1alpha3kind:VirtualServicemetadata:name:httpbinspec:hosts:- &#34;httpbin.example.com&#34;gateways:- httpbin-gatewayhttp:- route:- destination:host:httpbin这个 Virtual Service 使用 gateways 字段与刚才配置的 Istio Ingress 对象关联到一起，将到达 Istio Ingress 上的请求转发到集群内部的 httpbin 服务上。"/>
+
+
+
+
+
+<link rel="preload" href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" as="style">
+<link href="/scss/main.min.2ee4f97cec4f212321e49585048d1214cfa48bdaf90874c970e6498839185f85.css" rel="stylesheet" integrity="">
+
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+
+  </head>
+  <body class="td-page">
+    <header>
+      
+<nav class="js-navbar-scroll navbar navbar-expand navbar-dark flex-column flex-md-row td-navbar">
+        <a class="navbar-brand" href="/">
+		<span class="navbar-logo"></span><span class="text-uppercase font-weight-bold">郭栋的博客</span>
+	</a>
+	<div class="td-navbar-nav-scroll ml-md-auto" id="main_navbar">
+		<ul class="navbar-nav mt-2 mt-lg-0">
+			
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link" href="/about/" ><span>About</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				
+				
+				<a class="nav-link active" href="/docs/" ><span class="active">Documentation</span></a>
+			</li>
+			
+			<li class="nav-item mr-4 mb-2 mb-lg-0">
+				
+				
+				
+				
+				<a class="nav-link" href="https://github.com/mcsos" target="_blank" ><span>GitHub</span></a>
+			</li>
+			
+			
+			
+		</ul>
+	</div>
+	<div class="navbar-nav d-none d-lg-block">
+</div>
+</nav>
+
+    </header>
+    <div class="container-fluid td-outer">
+      <div class="td-main">
+        <div class="row flex-xl-nowrap">
+          <div class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none">
+            
+
+
+
+
+<div id="td-sidebar-menu" class="td-sidebar__inner">
+  
+  <form class="td-sidebar__search d-flex align-items-center">
+    
+
+    <button class="btn btn-link td-sidebar__toggle d-md-none p-0 ml-3 fas fa-bars" type="button" data-toggle="collapse" data-target="#td-section-nav" aria-controls="td-docs-nav" aria-expanded="false" aria-label="Toggle section navigation">
+    </button>
+  </form>
+  
+  <nav class="collapse td-sidebar-nav pt-2 pl-4" id="td-section-nav">
+    
+    
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Documentation</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docs">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">Istio学习笔记</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistio">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Istio源代码解析</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocode">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/discovery/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Discovery</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodediscovery">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryintro" href="/docs/istio/code/discovery/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryservicecontroller" href="/docs/istio/code/discovery/servicecontroller/">第二章 ServiceController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoveryconfigcontroller" href="/docs/istio/code/discovery/configcontroller/">第三章 ConfigController</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodediscoverydiscoveryserver" href="/docs/istio/code/discovery/discoveryserver/">第四章 DiscoveryServer</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/agent/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">Pilot Agent</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodeagent">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentagent" href="/docs/istio/code/agent/agent/">第一章 Agent主要组件</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodeagentproxy" href="/docs/istio/code/agent/proxy/">第二章 Envoy启动过程</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/code/certificate/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">证书管理</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiocodecertificate">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateintro" href="/docs/istio/code/certificate/intro/">第一章 概述</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificateistiod_cert" href="/docs/istio/code/certificate/istiod_cert/">第二章 Istiod服务器端证书</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatecaserver" href="/docs/istio/code/certificate/caserver/">第三章 CA Server</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiocodecertificatesdsserver" href="/docs/istio/code/certificate/sdsserver/">第四章 SDS Server</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/" class="align-left pl-0 pr-2 td-sidebar-link td-sidebar-link__section">深入理解Istio</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiounderstanding">
+      
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/traffic/" class="align-left pl-0 pr-2 active td-sidebar-link td-sidebar-link__section">流量管理</a>
+  </li>
+  <ul>
+    <li class="collapse show" id="docsistiounderstandingtraffic">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page  active" id="m-docsistiounderstandingtrafficingress" href="/docs/istio/understanding/traffic/ingress/">Ingress</a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+      
+      
+
+
+
+
+
+
+<ul class="td-sidebar-nav__section pr-md-3">
+  <li class="td-sidebar-nav__section-title">
+    <a  href="/docs/istio/understanding/security/" class="align-left pl-0 pr-2 collapsed td-sidebar-link td-sidebar-link__section">安全机制</a>
+  </li>
+  <ul>
+    <li class="collapse " id="docsistiounderstandingsecurity">
+      
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecuritymtls" href="/docs/istio/understanding/security/mtls/">双向tls认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityenduser_authentication" href="/docs/istio/understanding/security/enduser_authentication/">对终端用户的认证</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurityauthorization" href="/docs/istio/understanding/security/authorization/">授权</a>
+      
+      
+      
+      
+      
+      <a class="td-sidebar-link td-sidebar-link__page " id="m-docsistiounderstandingsecurity_enduser_authentication" href="/docs/istio/understanding/security/_enduser_authentication/"></a>
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+      
+      
+    </li>
+  </ul>
+</ul>
+
+  </nav>
+</div>
+
+
+
+
+          </div>
+          <div class="d-none d-xl-block col-xl-2 td-toc d-print-none">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+          </div>
+          <main class="col-12 col-md-9 col-xl-8 pl-md-5" role="main">
+            
+  
+
+            <nav aria-label="breadcrumb" class="d-none d-md-block d-print-none">
+	<ol class="breadcrumb spb-1">
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/">Documentation</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/">Istio学习笔记</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/understanding/">深入理解Istio</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item" >
+	<a href="/docs/istio/understanding/traffic/">流量管理</a>
+</li>
+
+
+
+
+<li class="breadcrumb-item active" aria-current="page">
+	<a href="/docs/istio/understanding/traffic/ingress/">Ingress</a>
+</li>
+
+	</ol>
+</nav	>
+
+            
+<div class="td-content">
+	<h1>Ingress</h1>
+    
+	       
+	<h2 id="概述">概述</h2>
+<p>Istio 通过 Istio Ingress 来将集群内部的服务暴露到集群外部，Istio Ingress 相对于 Kubernetes Ingress 的功能做了很多增强，包括四至七层的负载均衡器、TLS配置等等，并且可以将 Istio 在集群内部的流量控制和安全等功能按照同样的方式用于对外提供的服务中，而且可以将 Ingress 与内部的对象统一进行管理。</p>
+<p>Istio Ingress 功能会提供一个 Gateway 的 CRD 对象来让用户对对外暴露的服务进行配置，同时，可以将 Virtual Service 和 Destination Rule 等对应结合起来使用。需要说明的是 Gateway 除了可以用于配置从集群外部访问集群内的服务之外，还可以用于配置从集群内部访问集群外部服务的情况。</p>
+<p>下面是一个 Gateway 的例子：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">apiVersion</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>networking.istio.io/v1alpha3<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">kind</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>Gateway<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">metadata</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin-gateway<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">selector</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">istio</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>ingressgateway<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">servers</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- <span style="color:#204a87;font-weight:bold">port</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">number</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span><span style="color:#0000cf;font-weight:bold">80</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>http<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">      </span><span style="color:#204a87;font-weight:bold">protocol</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>HTTP<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span><span style="color:#204a87;font-weight:bold">hosts</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#4e9a06">&#34;httpbin.example.com&#34;</span><span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这个例子中配置了用户可以使用 <code>httpbin.example.com</code> 这个 host 来访问集群内部的 <code>httpbin</code> 服务，使用的端口号为 80。</p>
+<p>Gateway 对象本身只负责在 Istio Ingress 上的配置， 使 Istio Ingress 可以识别这个请求并且将其放行，但是从 Istio Ingress 到集群内部的服务之间还需要一个 Virtual Service 对象来提供路由信息，配置如下：</p>
+<div class="highlight"><pre style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#204a87;font-weight:bold">apiVersion</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>networking.istio.io/v1alpha3<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">kind</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>VirtualService<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">metadata</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">name</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline"></span><span style="color:#204a87;font-weight:bold">spec</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">hosts</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- <span style="color:#4e9a06">&#34;httpbin.example.com&#34;</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">gateways</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- httpbin-gateway<span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span><span style="color:#204a87;font-weight:bold">http</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">  </span>- <span style="color:#204a87;font-weight:bold">route</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">    </span>- <span style="color:#204a87;font-weight:bold">destination</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline">
+</span><span style="color:#f8f8f8;text-decoration:underline">        </span><span style="color:#204a87;font-weight:bold">host</span><span style="color:#000;font-weight:bold">:</span><span style="color:#f8f8f8;text-decoration:underline"> </span>httpbin<span style="color:#f8f8f8;text-decoration:underline">
+</span></code></pre></div><p>这个 Virtual Service 使用 <code>gateways</code> 字段与刚才配置的 Istio Ingress 对象关联到一起，将到达 Istio Ingress 上的请求转发到集群内部的 <code>httpbin</code> 服务上。</p>
+<p>接下来我们先看一下在 Istio 中 Ingress 的部署情况，从而为后续如何使用它做一些准备工作。</p>
+
+	
+	
+	<div class="text-muted mt-5 pt-3 border-top">Last modified July 29, 2020: <a  href="/commit/b5a7a3dc6cc10cb647d0e2572c05181ae3910aff">Add istio/understanding/traffic/ingress.md (b5a7a3d)</a>
+</div>
+</div>
+
+
+          </main>
+        </div>
+      </div>
+      
+<footer class="bg-dark py-5 row d-print-none">
+  <div class="container-fluid mx-sm-5">
+    <div class="row">
+      <div class="col-6 col-sm-4 text-xs-center order-sm-2">
+        
+      </div>
+      <div class="col-6 col-sm-4 text-right text-xs-center order-sm-3">
+        
+      </div>
+      <div class="col-12 col-sm-4 text-center py-2 order-sm-2">
+        <small class="text-white">&copy; 2020 微信: mcsos2048 All Rights Reserved</small>
+        
+	
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+<script src="/js/main.min.29b0315468c00226fa6f4556a9cebc0ac4fe1ce1457a01b22c0a06b329877383.js" integrity="sha256-KbAxVGjAAib6b0VWqc68CsT&#43;HOFFegGyLAoGsymHc4M=" crossorigin="anonymous"></script>
+
+
+
+  </body>
+</html>
