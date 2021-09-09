@@ -1,6 +1,6 @@
 # 个人博客
 
-主要包含一些学习笔记，编译后的可浏览版本 https://mcsos.github.io/docs/ 。
+主要包含一些学习笔记，编译后的可浏览版本 https://derekguo001.github.io/docs/ 。
 
 目前有两个系列的文章：
 - Istio 源代码解析
